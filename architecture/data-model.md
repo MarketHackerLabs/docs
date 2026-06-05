@@ -14,6 +14,10 @@ erDiagram
     Role ||--o{ RolePermission : has
     Membership }o--|| Role : assigned
     MarketplaceAccount ||--o{ MarketplaceCredential : has
+    User ||--o{ UserMarketplaceAccount : assigned
+    MarketplaceAccount ||--o{ UserMarketplaceAccount : has
+    User ||--o{ UserMarketplaceSectionAccess : has
+    MarketplaceAccount ||--o{ MarketplaceSection : defines
     User ||--o{ RefreshToken : has
     User ||--o{ AuditLog : triggers
 
@@ -144,6 +148,28 @@ erDiagram
 | `marketplace` | enum | `wildberries`, `ozon` |
 | `external_seller_id` | string | ID продавца на MP |
 | `display_name` | string | Человекочитаемое имя |
+
+### UserMarketplaceAccount
+
+Привязка пользователя к кабинету MP (уровень 2 доступа).
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `user_id` | UUID | FK → User |
+| `marketplace_account_id` | UUID | FK → MarketplaceAccount |
+| `is_default` | bool | Кабинет по умолчанию для пользователя |
+
+### UserMarketplaceSectionAccess
+
+Гранулярные права на разделы кабинета (уровень 3).
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `user_id` | UUID | FK → User |
+| `marketplace_account_id` | UUID | FK → MarketplaceAccount |
+| `section_key` | string | `fin_analytics`, `ads`, `supplies`, ... |
+
+См. [Модель доступа к кабинетам MP](./marketplace-access-model.md).
 
 ### MarketplaceCredential
 

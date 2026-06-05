@@ -1,32 +1,42 @@
 # Контроль доступа
 
-## Почему не чистый RBAC
+## Обзор
 
-Для MarketHacker недостаточно ролей вида `admin / user`. Необходимо учитывать:
-
-1. **Организационный контекст** — пользователь в разных командах с разными ролями.
-2. **Ресурсный контекст** — доступ к конкретным кабинетам WB/Ozon.
-3. **Функциональный контекст** — аналитика, реклама, финансы, настройки.
-
-## Решение: RBAC + ReBAC (гибрид)
-
-| Слой | Что контролирует | Пример |
-|------|------------------|--------|
-| **RBAC** | Роль в организации | `owner`, `admin`, `manager`, `viewer` |
-| **Permission** | Атомарное действие | `analytics:read`, `ads:write`, `billing:manage` |
-| **ReBAC** | Связь user ↔ resource | `user:123 → can_view → marketplace_account:456` |
-| **ABAC** (опционально) | Условия | `plan == pro`, `marketplace == ozon` |
+MarketHacker использует **трёхуровневую** модель доступа. Подробный разбор механизма proxy и section permissions — в [Модели доступа к кабинетам MP](./marketplace-access-model.md).
 
 ```mermaid
-flowchart LR
-    USER[User] --> MEM[Membership]
-    MEM --> ROLE[Role]
-    ROLE --> PERM[Permissions]
-    USER --> RES[Resource Access]
-    RES --> MPA[Marketplace Account]
+flowchart TB
+    subgraph L1 [Уровень 1 — Организация]
+        MEM[Membership + Role]
+        PERM[Permissions: analytics:read, ads:write...]
+    end
+
+    subgraph L2 [Уровень 2 — Кабинет MP]
+        BIND[marketplace_account_id]
+        PARTNER[Иерархия org / partner]
+    end
+
+    subgraph L3 [Уровень 3 — Разделы кабинета]
+        SEC[section_permissions]
+        SEC --> FIN[fin_analytics]
+        SEC --> ADS[ads]
+        SEC --> SUP[supplies]
+    end
+
+    USER[User] --> L1 --> L2 --> L3
 ```
 
-## Роли (стартовый набор)
+| Уровень | Вопрос | Пример |
+|---------|--------|--------|
+| **1. Org RBAC** | Что может делать в MarketHacker? | Пригласить участника, смотреть биллинг |
+| **2. Account binding** | К какому кабинету MP привязан? | WB «ООО Звезда», Ozon «Магазин 1» |
+| **3. Section permissions** | Какие разделы кабинета MP видит? | Только «Реклама» и «Поставки», без «Баланса» |
+
+---
+
+## Уровень 1: RBAC в организации
+
+### Роли (стартовый набор)
 
 | Роль | Описание | Типичный пользователь |
 |------|----------|----------------------|
@@ -35,7 +45,9 @@ flowchart LR
 | `manager` | Работа с аналитикой и рекламой | Менеджер по продажам |
 | `viewer` | Только чтение | Аналитик, стажёр |
 
-### Матрица permissions по ролям
+### Permissions
+
+Формат: `{resource}:{action}`.
 
 | Permission | owner | admin | manager | viewer |
 |------------|:-----:|:-----:|:-------:|:------:|
@@ -45,89 +57,172 @@ flowchart LR
 | `members:manage` | ✓ | ✓ | — | — |
 | `marketplace:link` | ✓ | ✓ | — | — |
 | `marketplace:unlink` | ✓ | ✓ | — | — |
+| `section_permissions:manage` | ✓ | ✓ | — | — |
 | `analytics:read` | ✓ | ✓ | ✓ | ✓ |
 | `analytics:export` | ✓ | ✓ | ✓ | — |
 | `ads:read` | ✓ | ✓ | ✓ | ✓ |
 | `ads:write` | ✓ | ✓ | ✓ | — |
 | `credentials:view` | ✓ | ✓ | — | — |
 
-## Permissions
+Permissions хранятся в БД (`role_permissions`), не хардкодятся в коде.
 
-Формат: `{resource}:{action}`.
+---
 
-```
-org:manage
-org:billing
-members:invite
-members:manage
-marketplace:link
-marketplace:unlink
-analytics:read
-analytics:export
-ads:read
-ads:write
-credentials:view
-```
+## Уровень 2: Привязка к кабинету маркетплейса
 
-Permissions хранятся в БД (`role_permissions`), не хардкодятся в коде. Это позволяет менять права без деплоя.
-
-## ReBAC — доступ к ресурсам
-
-Помимо роли, пользователь может иметь **явный доступ** к конкретным marketplace accounts:
+Пользователь в организации может быть привязан к одному или нескольким кабинетам MP (ReBAC).
 
 ```sql
-CREATE TABLE resource_access (
-    id          UUID PRIMARY KEY,
-    user_id     UUID NOT NULL REFERENCES users(id),
-    resource_type VARCHAR(50) NOT NULL,  -- 'marketplace_account'
-    resource_id UUID NOT NULL,
-    access_level VARCHAR(20) NOT NULL,   -- 'view', 'manage'
-    granted_by  UUID REFERENCES users(id),
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE user_marketplace_accounts (
+    id                      UUID PRIMARY KEY,
+    user_id                 UUID NOT NULL REFERENCES users(id),
+    marketplace_account_id  UUID NOT NULL REFERENCES marketplace_accounts(id),
+    is_default              BOOLEAN NOT NULL DEFAULT false,
+    granted_by              UUID REFERENCES users(id),
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, marketplace_account_id)
 );
 ```
 
-**Сценарий:** менеджер видит только 2 из 10 кабинетов организации.
+**Сценарии:**
+
+- Владелец (`owner`) видит все кабинеты org без явной привязки.
+- Менеджер привязан к 2 из 10 кабинетов — видит только их.
+- JWT содержит `marketplace_account_id` активного кабинета.
+
+### Иерархия партнёров / агентств
+
+Для модели «агентство управляет клиентами»:
+
+- **Parent org** — агентство; видит sub-orgs или linked accounts.
+- **Sub-org / linked account** — клиент агентства.
+- Admin агентства назначает менеджеров на конкретные кабинеты клиентов.
+
+---
+
+## Уровень 3: Section permissions (разделы кабинета MP)
+
+Гранулярные права **внутри** кабинета Wildberries/Ozon.
+
+| section_key (WB) | Раздел |
+|------------------|--------|
+| `balance` | Баланс |
+| `fin_analytics` | Финансовая аналитика |
+| `prices_and_discounts` | Цены и скидки |
+| `ads` | Реклама |
+| `supplies` | Поставки |
+| `brands` | Бренды |
+| `documents` | Документы |
+| `reviews` | Отзывы и вопросы |
+
+Полный список и mapping для Ozon — см. [Модель доступа к кабинетам MP](./marketplace-access-model.md).
+
+### Enforcement
+
+| Слой | Как применяется |
+|------|-----------------|
+| **Extension (MVP)** | Content script скрывает UI, блокирует URL и XHR по `section_permissions` |
+| **MP Proxy (v2+)** | Reverse proxy фильтрует HTML/API по `section_permissions` |
+| **Backend API** | Проверка при выдаче данных MarketHacker |
+
+Пустой список `section_permissions` → полный доступ к назначенному кабинету (policy по умолчанию для owner/admin).
+
+---
 
 ## Алгоритм проверки доступа
 
 ```python
-async def authorize(
+async def authorize_marketplace_access(
     user: User,
     org_id: UUID,
-    permission: str,
-    resource_id: UUID | None = None,
+    marketplace_account_id: UUID,
+    org_permission: str | None = None,
+    section: str | None = None,
 ) -> bool:
-    # 1. Проверить membership
     membership = await get_membership(user.id, org_id)
     if not membership or not membership.is_active:
         return False
 
-    # 2. Проверить permission по роли
-    if not role_has_permission(membership.role, permission):
+    # Уровень 1: org permission (если запрошен)
+    if org_permission and not role_has_permission(membership.role, org_permission):
         return False
 
-    # 3. Если запрошен конкретный ресурс — проверить ReBAC
-    if resource_id:
-        # owner/admin имеют доступ ко всем ресурсам org
+    # Уровень 2: привязка к кабинету
+    if membership.role.name not in ("owner", "admin"):
+        if not await has_account_access(user.id, marketplace_account_id):
+            return False
+
+    # Уровень 3: section permission
+    if section:
         if membership.role.name in ("owner", "admin"):
-            return resource_belongs_to_org(resource_id, org_id)
-        return await has_resource_access(user.id, resource_id)
+            return True
+        sections = await get_section_permissions(user.id, marketplace_account_id)
+        if sections and section not in sections:
+            return False
 
     return True
 ```
 
-## Контекст организации
+---
 
-- JWT содержит `org_id` — текущая активная организация.
-- Пользователь может переключать org через `POST /auth/switch-org`.
-- Все запросы к данным фильтруются по `org_id` из JWT.
-- Middleware устанавливает `current_org_id` — нельзя подменить org через query-параметр.
+## JWT payload
 
-## Расширение в будущем
+```json
+{
+  "sub": "user_uuid",
+  "org_id": "org_uuid",
+  "marketplace_account_id": "account_uuid",
+  "marketplace": "wildberries",
+  "permissions": ["analytics:read", "ads:write"],
+  "section_permissions": ["fin_analytics", "ads", "supplies"]
+}
+```
 
-| Этап | Что добавляем |
+---
+
+## ReBAC — явный доступ к ресурсам
+
+Дополнительно к ролям — явные grants (для нестандартных случаев):
+
+```sql
+CREATE TABLE resource_access (
+    id            UUID PRIMARY KEY,
+    user_id       UUID NOT NULL REFERENCES users(id),
+    resource_type VARCHAR(50) NOT NULL,
+    resource_id   UUID NOT NULL,
+    access_level  VARCHAR(20) NOT NULL,
+    granted_by    UUID REFERENCES users(id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+---
+
+## Контекст организации и кабинета
+
+- JWT содержит `org_id` и `marketplace_account_id`.
+- `POST /auth/switch-org` — смена организации.
+- `POST /auth/switch-marketplace-account` — смена активного кабинета MP.
+- Middleware injects `current_org_id` и `current_marketplace_account_id`.
+- PostgreSQL RLS фильтрует по `org_id`.
+
+---
+
+## API управления доступами (MVP+)
+
+| Метод | Путь | Permission |
+|-------|------|------------|
+| PUT | `/api/v1/members/{id}/marketplace-accounts` | `members:manage` |
+| PUT | `/api/v1/members/{id}/section-permissions` | `section_permissions:manage` |
+| GET | `/api/v1/members/{id}/effective-permissions` | `members:manage` |
+
+---
+
+## Этапы внедрения
+
+| Этап | Что реализуем |
 |------|---------------|
-| MVP | RBAC + базовый ReBAC для marketplace accounts |
-| v2 | ABAC-условия по тарифу (`plan == pro`) |
-| v3 | Custom roles (org создаёт свои роли из permissions) |
+| MVP | Org RBAC + account binding |
+| v1.1 | Section permissions + extension UI filtering |
+| v2 | MP proxy для WB (строгая изоляция credentials) |
+| v3 | MP proxy для Ozon, custom roles |
