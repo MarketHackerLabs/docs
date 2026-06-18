@@ -124,45 +124,63 @@ flowchart LR
     MIGRATE --> DEPLOY[Deploy]
 ```
 
-## Production (этап 1)
+## Production
+
+### Топология (текущая)
+
+Все компоненты развёрнуты на одном VPS. Caddy работает в host-network, проксируя по доменному имени.
+
+```
+Internet :443
+    │
+    ▼
+ Caddy (host network, TLS Let's Encrypt)
+    ├── api.markethacker.ru       → 127.0.0.1:8000  (FastAPI backend)
+    ├── admin.markethacker.ru     → 127.0.0.1:3001  (Admin Panel, Next.js)
+    ├── team.markethacker.ru      → 127.0.0.1:3002  (Manager Portal, Next.js)
+    └── wb-proxy.markethacker.ru  → 127.0.0.1:8000  (WB Portal Proxy, FastAPI)
+```
+
+> `wb-proxy.markethacker.ru` указывает на тот же FastAPI backend, Caddy переписывает путь:
+> `GET /something` → `GET /api/v1/proxy/portal/something`.
+
+### Docker Compose стеки
+
+Каждый сервис разворачивается отдельным стеком из своего каталога:
+
+| Стек | Каталог | Compose-файл | Порт |
+|------|---------|--------------|------|
+| Backend API + Worker + DB | `backend/` | `docker-compose.yml` | 8000 |
+| Admin Panel | `admin-panel/` | `docker-compose.prod.yml` | 3001 |
+| Manager Portal | `manager-portal/` | `docker-compose.prod.yml` | 3002 |
+| Caddy | `caddy/` | `docker-compose.yml` | 80/443 |
 
 ### Компоненты
 
 | Компонент | Решение | Примечание |
 |-----------|---------|------------|
-| API | Docker container | 1-2 replicas |
-| Worker | Docker container | 1 replica |
-| PostgreSQL | Managed (Yandex / RDS) | Автобэкапы |
-| Redis | Managed Redis | Persistence AOF |
-| Secrets | Env vars → Vault | По мере роста |
-| DNS | `api.markethacker.ru` | |
-| TLS | Let's Encrypt / cloud | |
-
-### Минимальная конфигурация
-
-```
-┌─────────────┐     ┌─────────────┐
-│   API (x2)  │────│  PostgreSQL  │
-└──────┬──────┘     └─────────────┘
-       │
-┌──────┴──────┐     ┌─────────────┐
-│  Worker (x1)│────│    Redis     │
-└─────────────┘     └─────────────┘
-```
+| API (FastAPI) | Docker container | + WB Portal Proxy |
+| Worker (ARQ) | Docker container | Фоновые задачи |
+| Admin Panel | Docker container (Next.js) | `admin.markethacker.ru` |
+| Manager Portal | Docker container (Next.js) | `team.markethacker.ru` |
+| Caddy | Docker (host network) | TLS, reverse proxy |
+| PostgreSQL | Managed или Docker | Автобэкапы |
+| Redis | Managed или Docker | Persistence AOF |
 
 ### Health checks
 
-| Probe | Путь | Проверяет |
-|-------|------|-----------|
-| Liveness | `GET /health` | Процесс жив |
-| Readiness | `GET /ready` | DB + Redis доступны |
+| Сервис | Probe | Путь |
+|--------|-------|------|
+| API | Liveness | `GET /health` |
+| API | Readiness | `GET /ready` |
+| Admin Panel | Docker | `GET /login` (порт 3001) |
+| Manager Portal | Docker | `GET /login` (порт 3002) |
 
 ### Логирование
 
 - Structured JSON logs (structlog).
 - `request_id` в каждой записи.
 - Уровни: DEBUG (dev), INFO (prod), ERROR (всегда).
-- Агрегация: Loki / CloudWatch / Yandex Cloud Logging.
 
 ### Мониторинг
 
@@ -183,15 +201,31 @@ flowchart LR
 
 ## Переменные окружения
 
+### Backend (`backend/.env`)
+
 ```bash
-# .env.example
 DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/markethacker
 REDIS_URL=redis://localhost:6379/0
 JWT_SECRET=change-me-in-production
 JWT_ACCESS_TTL_MINUTES=15
 JWT_REFRESH_TTL_DAYS=30
 ENCRYPTION_KEY=change-me-32-bytes-key-here!!!!
-ENVIRONMENT=development
-LOG_LEVEL=DEBUG
-CORS_ORIGINS=["chrome-extension://extension-id"]
+ENVIRONMENT=production
+LOG_LEVEL=INFO
+CORS_ORIGINS=["https://team.markethacker.ru","https://wb-proxy.markethacker.ru","https://admin.markethacker.ru"]
+
+# WB Portal Proxy (production)
+WB_PORTAL_PUBLIC_BASE_URL=https://wb-proxy.markethacker.ru
+WB_PORTAL_COOKIE_PATH=/
+WB_PORTAL_COOKIE_SECURE=true
+```
+
+> ⚠️ `WB_PORTAL_COOKIE_PATH=/` обязателен в production. Caddy rewrite убирает `/api/v1/proxy/portal`, поэтому cookie должна устанавливаться на корневой путь.
+
+### Manager Portal (`manager-portal/.env`)
+
+```bash
+NEXT_PUBLIC_API_URL=https://api.markethacker.ru/api/v1
+MANAGER_PORTAL_PORT=3002
+FULL_IMAGE=markethacker-manager-portal:latest
 ```

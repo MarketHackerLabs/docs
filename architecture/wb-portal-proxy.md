@@ -1,0 +1,322 @@
+# WB Portal Proxy
+
+Полное описание механизма reverse-proxy к `seller.wildberries.ru`, реализованного в MarketHacker.
+
+---
+
+## Назначение
+
+WB Portal Proxy позволяет менеджерам работать в личном кабинете Wildberries **через безопасный прокси-сервер** без получения прямого доступа к учётным данным продавца.
+
+| Проблема | Решение |
+|----------|---------|
+| Менеджер не должен знать API-ключ или cookies владельца | Credentials хранятся на сервере, менеджер их не видит |
+| WB SPA требует живую сессию (JWT + cookies) | Владелец делает однократный «захват» сессии через JS-сниппет |
+| WB использует HttpOnly-cookies (`wbx-validation-key`) | Захват через DevTools вручную при onboarding |
+| WB SPA пытается выйти из сессии и редиректить на auth | JS-инжект блокирует logoff и auth-редиректы |
+
+---
+
+## Компоненты
+
+```
+team.markethacker.ru          wb-proxy.markethacker.ru
+(manager-portal)               (WB Portal Proxy)
+       │                              │
+       │  POST /web-handshake         │
+       ├──────────────────────►  api.markethacker.ru:8000
+       │                              │  GET /api/v1/proxy/portal/*
+       │                              │◄──────────────────────────
+       │  callback_url redirect       │
+       │◄─────────────────────        │
+       │                              │
+  browser открывает                   │
+  wb-proxy.markethacker.ru            │
+       │──────────────────────────────►
+                                 Caddy rewrite → API
+                                 API → seller.wildberries.ru
+```
+
+| Компонент | Технология | Описание |
+|-----------|------------|----------|
+| `wb-proxy.markethacker.ru` | Caddy → FastAPI | Публичный домен прокси |
+| `portal_router.py` | FastAPI | Маршрутизация всех запросов к WB |
+| `portal_service.py` | Python | Бизнес-логика: сессии, права доступа |
+| `wb_portal_client.py` | httpx | HTTP-клиент к `seller.wildberries.ru` и субдоменам |
+| `portal_inject.py` | JS → HTML | JS-скрипт, инжектируемый в HTML-ответы WB |
+| `wb_hosts.py` | Python | Маппинг WB-субдоменов → фиксированные URL-префиксы |
+
+---
+
+## Полный флоу открытия кабинета
+
+```mermaid
+sequenceDiagram
+    participant M as Менеджер (браузер)
+    participant MP as manager-portal
+    participant API as api.markethacker.ru
+    participant Caddy as wb-proxy.markethacker.ru (Caddy)
+    participant WB as seller.wildberries.ru
+
+    M->>MP: Нажать "Открыть кабинет WB"
+    MP->>API: POST /api/v1/proxy/web-handshake
+    API-->>MP: { callback_url, portal_url }
+
+    M->>Caddy: GET /auth/callback?token=xxx
+    Caddy->>API: GET /api/v1/proxy/portal/auth/callback?token=xxx
+    API-->>M: 302 → / (Set-Cookie: mh_portal_token; Path=/; Secure)
+
+    M->>Caddy: GET /
+    Caddy->>API: GET /api/v1/proxy/portal/ (Cookie: mh_portal_token=...)
+    API->>WB: GET https://seller.wildberries.ru/ (authorizev3 + credentials)
+    WB-->>API: HTML
+    API->>API: inject auth bootstrap script
+    API-->>M: HTML с inject-скриптом
+```
+
+---
+
+## Onboarding: захват portal-сессии
+
+WB SPA использует:
+- `authorizev3` JWT в `localStorage` — основной токен авторизации
+- `wbx-validation-key` — HttpOnly-cookie (недоступна JS)
+- `x-supplier-id` — ID поставщика в cookies и `localStorage`
+
+Так как `wbx-validation-key` помечена HttpOnly, её невозможно захватить программно через `document.cookie`. Поэтому захват делается в два шага.
+
+### Шаг 1 — Автоматический захват через JS-сниппет
+
+1. Владелец открывает `seller.wildberries.ru` и входит.
+2. В manager-portal нажимает **«Привязать WB»** → получает одноразовый сниппет.
+3. Вставляет сниппет в **DevTools Console** на `seller.wildberries.ru`.
+4. Сниппет читает `authorizev3` из `localStorage` и остальные cookies из `document.cookie`.
+
+### Шаг 2 — Ручной захват `wbx-validation-key`
+
+Сниппет показывает `prompt()` с инструкцией:
+
+```
+Шаг 2 — wbx-validation-key (HttpOnly, недоступна JS):
+
+DevTools (F12) → Application → Cookies → seller.wildberries.ru
+Найдите wbx-validation-key и скопируйте значение.
+Или нажмите Отмена чтобы пропустить:
+```
+
+Пользователь:
+1. Открывает **DevTools → Application → Cookies → seller.wildberries.ru**.
+2. Находит строку `wbx-validation-key`, копирует Value.
+3. Вставляет в prompt.
+
+После этого сниппет отправляет `{authorizev3, cookies}` на одноразовый capture-endpoint.
+
+### Хранение credentials
+
+Данные шифруются (AES-256-GCM) и сохраняются в `marketplace_credentials` с типом `portal_session`.
+
+```json
+{
+  "authorizev3": "eyJ...",
+  "cookies": {
+    "x-supplier-id": "123456",
+    "wbx-validation-key": "abc...",
+    "locale": "ru"
+  },
+  "local_storage": {
+    "authorizev3": "eyJ...",
+    "wb-eu-passport-v2.access-token": "eyJ...",
+    "access-token": "eyJ..."
+  }
+}
+```
+
+---
+
+## Прокси-сессия
+
+Схема авторизации прокси использует краткоживущий Redis-токен:
+
+```
+1. web-handshake → создать proxy_session в Redis (TTL 1h)
+                   → создать одноразовый callback_token (TTL 5m)
+2. /auth/callback → exchange callback_token → установить cookie mh_portal_token
+3. /{path} → проверить cookie mh_portal_token → загрузить portal_auth из DB
+```
+
+| Сущность | Хранилище | TTL |
+|----------|-----------|-----|
+| `proxy_session` | Redis | 1 час |
+| `callback_token` | Redis | 5 минут |
+| `mh_portal_token` | Cookie (браузер) | 1 час |
+| `portal_session` credentials | PostgreSQL (AES-256-GCM) | бессрочно |
+
+---
+
+## URL-маршрутизация субдоменов WB
+
+WB использует множество субдоменов. Каждый субдомен маппируется на фиксированный URL-префикс:
+
+| WB-субдомен | Прокси-префикс |
+|-------------|----------------|
+| `seller.wildberries.ru` (основной) | `/` (корень прокси) |
+| `seller-auth.wildberries.ru` | `/__auth__/` |
+| `seller-supply.wildberries.ru` | `/__supply__/` |
+| `seller-communications.wildberries.ru` | `/__comm__/` |
+| `seller-analytics.wildberries.ru` | `/__analytics__/` |
+| `seller-ads.wildberries.ru` | `/__ads__/` |
+| `suppliers-portal-api.wildberries.ru` | `/__portalapi__/` |
+| `passport.wildberries.ru` | `/__passport__/` |
+| ... и другие | см. `wb_hosts.py` |
+
+Неизвестные `*.wildberries.ru` и `*.wb.ru` субдомены обрабатываются через fallback — hostname используется напрямую как префикс (`/seller-new.wildberries.ru/...`).
+
+### Rewrite в `rewrite_body`
+
+Статические URL в HTML/JS переписываются при проксировании:
+```
+https://seller.wildberries.ru → https://wb-proxy.markethacker.ru
+https://seller-auth.wildberries.ru → https://wb-proxy.markethacker.ru/__auth__
+//seller-supply.wildberries.ru/ → https://wb-proxy.markethacker.ru/__supply__/
+```
+
+---
+
+## JS-инжект (`portal_inject.py`)
+
+В каждый HTML-ответ WB добавляется `<script id="mh-portal-auth">` перед первым `<script>` страницы. Скрипт выполняется **до загрузки WB-кода**.
+
+### Что делает inject-скрипт
+
+**1. Pre-inject токенов (до WB-кода)**
+```javascript
+localStorage.setItem("wb-eu-passport-v2.access-token", token);
+localStorage.setItem("access-token", token);
+localStorage.setItem("authorizev3", token);
+document.cookie = "WBTokenV3=" + token + "; path=/; max-age=86400; SameSite=Lax";
+// + все cookies из сохранённых credentials
+```
+
+**2. URL rewriter**
+
+Перехватывает все WB-URL и переписывает через прокси-префиксы. Обрабатывает:
+- Абсолютные URL (`https://seller-auth.wildberries.ru/...`)
+- Protocol-relative (`//seller-auth.wildberries.ru/...`)
+- Корневые пути (`/ns/something` → `proxyBase + /ns/something`)
+- Auth login pages → редирект на корень прокси
+
+**3. Перехват fetch/XHR**
+- Добавляет заголовок `authorizev3: getToken()` к каждому запросу (динамически читает из localStorage)
+- Блокирует logoff-запросы (возвращает фиктивный `200`)
+- Конвертирует `401` на `/ns/abac/` и `/ns/validate` → `204` (WB не инициирует logoff)
+
+**4. Перехват навигации**
+- `window.location.assign/replace` → rewriteUrl
+- `history.pushState/replaceState` → rewriteUrl
+- Блокирует переходы к auth login pages (`seller-auth.wildberries.ru/ru/`)
+
+**5. Защита localStorage**
+
+`setInterval` каждые 500ms восстанавливает ключи, если WB SPA их сбросила:
+```javascript
+if (!localStorage.getItem("wb-eu-passport-v2.access-token"))
+  localStorage.setItem("wb-eu-passport-v2.access-token", token);
+```
+
+**6. Блокировка кнопки выхода**
+
+`document.click` — interceptor блокирует клики на кнопки с текстом «Выйти» / `logout`.
+
+---
+
+## Set-Cookie relay
+
+WB устанавливает новые значения cookies в ответах (обновление `wbx-validation-key`, `WBTokenV3` и т.д.).
+
+**Проблема:** WB ставит их как `HttpOnly; Secure; Domain=wildberries.ru` — браузер их не сохранит для нашего домена.
+
+**Решение:**
+1. `WbPortalClient` собирает `Set-Cookie` из ответов WB в `self.last_set_cookies`.
+2. `portal_router.py` через `_relay_set_cookie()` очищает каждую куку: убирает `HttpOnly`, `Domain`, `Secure`, `SameSite=None` → `SameSite=Lax`.
+3. Очищенные `Set-Cookie` добавляются в ответ браузеру.
+4. При следующих запросах браузер отправляет обновлённые куки, прокси читает их из `Cookie` заголовка и мержит с сохранёнными credentials (credentials имеют приоритет).
+
+---
+
+## Section permissions в прокси
+
+При `web-handshake` сервис определяет разрешённые секции пользователя и сохраняет их в `proxy_session`. На каждый запрос через `proxy_request` проверяется:
+
+- Известные `/ns/*` пути → проверка `section_key` против `user_sections`
+- Неизвестные `/ns/*` пути → пропускаются без ограничений (инфраструктурные вызовы WB)
+
+Дополнительно, JS guard-скрипт (`build_portal_inject_script`) блокирует на стороне клиента:
+- Fetch/XHR к запрещённым путям (возвращает `403`)
+- Отображение страницы при переходе на запрещённый раздел
+
+---
+
+## Production-конфигурация
+
+### Backend `.env`
+
+```env
+WB_PORTAL_PUBLIC_BASE_URL=https://wb-proxy.markethacker.ru
+WB_PORTAL_COOKIE_PATH=/
+WB_PORTAL_COOKIE_SECURE=true
+```
+
+> ⚠️ `WB_PORTAL_COOKIE_PATH=/` обязателен. Без него cookie `mh_portal_token` устанавливается с `path=/api/v1/proxy/portal`, но браузер отправляет запросы к `wb-proxy.markethacker.ru/` (корень) — и кука не передаётся.
+
+### Caddy (`caddy/Caddyfile`)
+
+```caddy
+wb-proxy.markethacker.ru {
+    encode gzip zstd
+    import security_headers
+
+    handle {
+        rewrite * /api/v1/proxy/portal{uri}
+        reverse_proxy 127.0.0.1:8000 {
+            import api_upstream
+        }
+    }
+}
+```
+
+`{uri}` сохраняет путь + query string. `/auth/callback?token=xxx` → `/api/v1/proxy/portal/auth/callback?token=xxx`.
+
+### CORS
+
+```env
+CORS_ORIGINS=["https://team.markethacker.ru","https://wb-proxy.markethacker.ru","https://admin.markethacker.ru"]
+```
+
+---
+
+## Ограничения и известные особенности
+
+| Проблема | Статус |
+|----------|--------|
+| `wbx-validation-key` HttpOnly — нельзя захватить автоматически | Захват вручную через DevTools при onboarding |
+| WB SPA обновляет токен через `slide-v3` | JS динамически читает `getToken()` из localStorage |
+| WB периодически сбрасывает localStorage | `setInterval` каждые 500ms восстанавливает токены |
+| WB возвращает `401` на ABAC/validate без `wbx-validation-key` | Конвертируется в `204` чтобы WB не инициировал logoff |
+| Новые WB-субдомены не в маппинге | Fallback: hostname используется как префикс напрямую |
+| WebSocket-соединения | URL переписывается через `rewriteUrl`, но токен в header не поддерживается |
+
+---
+
+## Связанные файлы
+
+| Файл | Назначение |
+|------|------------|
+| `backend/src/markethacker/modules/proxy/api/portal_router.py` | FastAPI routes, Set-Cookie relay |
+| `backend/src/markethacker/modules/proxy/application/portal_service.py` | Бизнес-логика, сессии |
+| `backend/src/markethacker/modules/proxy/application/portal_inject.py` | JS bootstrap + guard scripts |
+| `backend/src/markethacker/modules/proxy/infrastructure/wb_portal_client.py` | HTTP-клиент к WB |
+| `backend/src/markethacker/modules/proxy/domain/wb_hosts.py` | Маппинг субдоменов |
+| `backend/src/markethacker/modules/proxy/domain/portal_auth.py` | Парсинг/сериализация credentials |
+| `backend/src/markethacker/modules/proxy/domain/wb_portal_routes.py` | Известные WB API пути + section_key |
+| `caddy/Caddyfile` | Reverse proxy конфигурация |
+| `manager-portal/src/app/(manager)/accounts/[id]/page.tsx` | UI захвата сессии |

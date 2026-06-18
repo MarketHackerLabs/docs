@@ -135,51 +135,50 @@ PUT /api/v1/members/{user_id}/section-permissions
 
 ## Механизм MP Proxy: ограничение видимости разделов
 
-Менеджер может работать с кабинетом MP **без прямого доступа** к credentials продавца — через reverse proxy:
+Менеджер работает с кабинетом MP **без прямого доступа** к credentials продавца — через reverse proxy `wb-proxy.markethacker.ru`.
+
+> Полное техническое описание — [WB Portal Proxy](./wb-portal-proxy.md).
 
 ```mermaid
 sequenceDiagram
-    participant M as Менеджер
-    participant EXT as Extension / Web UI
-    participant PROXY as wb-proxy.markethacker.ru
+    participant M as Менеджер (браузер)
+    participant MP as manager-portal
     participant API as api.markethacker.ru
-    participant MP as seller.wildberries.ru
+    participant Proxy as wb-proxy.markethacker.ru
+    participant WB as seller.wildberries.ru
 
-    M->>EXT: Login
-    EXT->>API: POST /auth/login
-    API-->>EXT: JWT + section_permissions
+    M->>MP: Нажать "Открыть кабинет WB"
+    MP->>API: POST /proxy/web-handshake
+    API-->>M: 302 → wb-proxy.../auth/callback (Set-Cookie mh_portal_token)
 
-    M->>EXT: Открыть кабинет WB
-    EXT->>PROXY: Открыть proxy с JWT
-
-    PROXY->>API: Validate session, load permissions
-    PROXY->>PROXY: Load MP credentials for marketplace_account_id
-
-    M->>PROXY: GET /finances/...
-    PROXY->>MP: Forward request with seller credentials
-    MP-->>PROXY: HTML/JSON response
-    PROXY->>PROXY: Filter by section_permissions
-    PROXY-->>M: Modified page (only allowed sections)
+    M->>Proxy: GET /
+    Proxy->>API: GET /api/v1/proxy/portal/ + cookie
+    API->>WB: GET seller.wildberries.ru (authorizev3 + cookies)
+    WB-->>API: HTML
+    API->>API: inject JS auth bootstrap
+    API-->>M: HTML (с JS-инжектом, section guard)
 ```
 
 ### Компоненты proxy-слоя
 
 | Компонент | Роль |
 |-----------|------|
-| **wb-proxy.markethacker.ru** | Reverse proxy перед `seller.wildberries.ru` |
-| **Credentials MP** | Хранятся на сервере для `marketplace_account_id`; менеджер их не видит |
-| **JWT пользователя** | Идентификация менеджера и его `section_permissions` |
-| **Фильтрация** | Proxy скрывает пункты меню, блокирует URL, режет HTML/JS/API-ответы |
+| **wb-proxy.markethacker.ru** | Публичный домен прокси (Caddy → FastAPI) |
+| **Credentials MP** | Хранятся на сервере зашифрованными (AES-256-GCM); менеджер не видит |
+| **proxy_session** | Краткоживущий Redis-токен (TTL 1h), привязывает cookie к сессии |
+| **JS-инжект** | Устанавливает auth-токены в localStorage/cookies до загрузки WB SPA |
+| **Section guard** | JS блокирует fetch/навигацию к запрещённым разделам на клиенте |
 
-Без авторизации proxy редиректит на login (302).
+### Onboarding кабинета (захват portal-сессии)
 
-### Сбор credentials (onboarding кабинета)
+WB использует HttpOnly-cookies, недоступные JS. Захват делается в два шага:
 
-1. Admin создаёт `marketplace_account` с API-ключом или через OAuth.
-2. Extension собирает cookies сессии MP (content script + background worker).
-3. Extension отправляет credentials на backend через одноразовый **collection-token**.
-4. Backend сохраняет credentials, привязанные к account.
-5. Proxy использует эти credentials для всех менеджеров этого кабинета.
+1. В manager-portal нажать **«Привязать WB»** → получить одноразовый JS-сниппет.
+2. Открыть `seller.wildberries.ru`, войти, вставить сниппет в **DevTools Console**.
+3. Сниппет автоматически захватит `authorizev3` и доступные cookies.
+4. Сниппет попросит вручную скопировать `wbx-validation-key` из **DevTools → Application → Cookies**.
+5. Credentials зашифровываются и сохраняются в БД.
+6. Все менеджеры этого кабинета используют сохранённую сессию через прокси.
 
 ---
 
@@ -210,8 +209,8 @@ flowchart TB
 
     subgraph clients [Клиенты]
         EXT[Chrome Extension]
-        WEB[Web Admin — будущее]
-        PROXY[MP Proxy — опционально]
+        WEB[Manager Portal]
+        PROXY[WB Portal Proxy ✅]
     end
 
     USER --> ORG
@@ -224,7 +223,7 @@ flowchart TB
 
 ### Два пути enforcement
 
-#### Вариант A: Extension-first (рекомендуется для MVP)
+#### Вариант A: Extension-first
 
 1. Пользователь логинится в extension → получает JWT с `marketplace_account_id` и `section_permissions`.
 2. Content script на `wildberries.ru` / `ozon.ru`:
@@ -236,25 +235,26 @@ flowchart TB
 **Плюсы:** не нужен отдельный proxy, работает с нативным UI маркетплейса.  
 **Минусы:** enforcement на клиенте; для строгой изоляции нужен server-side proxy.
 
-#### Вариант B: MP Proxy
+#### Вариант B: MP Proxy ✅ реализован для WB
 
-Отдельный сервис `wb-proxy.markethacker.ru` / `ozon-proxy.markethacker.ru`:
+Отдельный сервис `wb-proxy.markethacker.ru`:
 
-1. Reverse proxy перед кабинетом MP.
-2. Credentials seller account хранятся на сервере.
-3. Proxy фильтрует HTML/JS/API по `section_permissions`.
-4. Extension или web UI открывает proxy URL.
+1. Reverse proxy перед `seller.wildberries.ru`.
+2. Credentials seller account хранятся на сервере зашифрованными (AES-256-GCM).
+3. JS-инжект управляет auth-состоянием WB SPA.
+4. Section guard блокирует запрещённые разделы на клиенте и в proxy.
+5. Manager-portal открывает прокси через `web-handshake`.
 
 **Плюсы:** строгий контроль, менеджер не имеет прямого доступа к seller credentials.  
-**Минусы:** сложная инфраструктура, поддержка при изменении UI MP.
+**Минусы:** требует поддержки при изменении WB SPA.
 
-#### Рекомендация
+#### Статус реализации
 
-| Этап | Подход |
-|------|--------|
-| MVP | **Extension-first** — permissions с backend, UI filtering в content script |
-| v2 | **Proxy для WB** — для клиентов, которым нужна строгая изоляция credentials |
-| v3 | **Proxy для Ozon** — marketplace-specific adapters |
+| Этап | Подход | Статус |
+|------|--------|--------|
+| MVP | Extension-first — permissions с backend, UI filtering в content script | Частично |
+| **v1** | **Proxy для WB** — реализован полный reverse proxy с JS-инжектом | ✅ **Готово** |
+| v2 | Proxy для Ozon — marketplace-specific adapters | Будущее |
 
 ---
 
