@@ -18,9 +18,12 @@ flowchart TB
 
     subgraph L3 [Уровень 3 — Разделы кабинета]
         SEC[section_permissions]
-        SEC --> FIN[fin_analytics]
-        SEC --> ADS[ads]
-        SEC --> SUP[supplies]
+        SEC --> GROWTH[growth]
+        SEC --> PROD[products]
+        SEC --> SHIP[shipments]
+        SEC --> ANAL[analytics]
+        SEC --> PROMO[promotion]
+        SEC --> FIN[finances]
     end
 
     USER[User] --> L1 --> L2 --> L3
@@ -30,7 +33,7 @@ flowchart TB
 |---------|--------|--------|
 | **1. Org RBAC** | Что может делать в MarketHacker? | Пригласить участника, смотреть биллинг |
 | **2. Account binding** | К какому кабинету MP привязан? | WB «ООО Звезда», Ozon «Магазин 1» |
-| **3. Section permissions** | Какие разделы кабинета MP видит? | Только «Реклама» и «Поставки», без «Баланса» |
+| **3. Section permissions** | Какие группы меню кабинета MP видит? | Только «Аналитика» и «Продвижение», без «Финансов» |
 
 ---
 
@@ -102,27 +105,25 @@ CREATE TABLE user_marketplace_accounts (
 
 ## Уровень 3: Section permissions (разделы кабинета MP)
 
-Гранулярные права **внутри** кабинета Wildberries/Ozon.
+Гранулярные права **внутри** кабинета Wildberries/Ozon. Для WB — **6 групп бокового меню** `seller.wildberries.ru` (см. `wb_menu_groups.py`).
 
-| section_key (WB) | Раздел |
-|------------------|--------|
-| `balance` | Баланс |
-| `fin_analytics` | Финансовая аналитика |
-| `prices_and_discounts` | Цены и скидки |
-| `ads` | Реклама |
-| `supplies` | Поставки |
-| `brands` | Бренды |
-| `documents` | Документы |
-| `reviews` | Отзывы и вопросы |
+| section_key | Раздел |
+|-------------|--------|
+| `growth` | Рост продаж |
+| `products` | Товары и цены |
+| `shipments` | Поставки и заказы |
+| `analytics` | Аналитика |
+| `promotion` | Продвижение |
+| `finances` | Финансы |
 
-Полный список и mapping для Ozon — см. [Модель доступа к кабинетам MP](./marketplace-access-model.md).
+Каждая запись в `user_marketplace_section_access` содержит `can_read` и `can_write`. Полный список и mapping для Ozon — см. [Модель доступа к кабинетам MP](./marketplace-access-model.md).
 
 ### Enforcement
 
 | Слой | Как применяется |
 |------|-----------------|
-| **Extension (MVP)** | Content script скрывает UI, блокирует URL и XHR по `section_permissions` |
-| **MP Proxy (v2+)** | Reverse proxy фильтрует HTML/API по `section_permissions` |
+| **WB Portal Proxy** ✅ | Server-side проверка `/ns/*` путей + JS guard (скрытие chip-меню, блокировка fetch/навигации) |
+| **Extension** | Content script скрывает UI, блокирует URL и XHR по `section_permissions` |
 | **Backend API** | Проверка при выдаче данных MarketHacker |
 
 Пустой список `section_permissions` → полный доступ к назначенному кабинету (policy по умолчанию для owner/admin).
@@ -174,7 +175,10 @@ async def authorize_marketplace_access(
   "marketplace_account_id": "account_uuid",
   "marketplace": "wildberries",
   "permissions": ["analytics:read", "ads:write"],
-  "section_permissions": ["fin_analytics", "ads", "supplies"]
+  "section_permissions": {
+    "analytics": { "can_read": true, "can_write": false },
+    "promotion": { "can_read": true, "can_write": true }
+  }
 }
 ```
 
@@ -208,21 +212,23 @@ CREATE TABLE resource_access (
 
 ---
 
-## API управления доступами (MVP+)
+## API управления доступами
 
 | Метод | Путь | Permission |
 |-------|------|------------|
-| PUT | `/api/v1/members/{id}/marketplace-accounts` | `members:manage` |
-| PUT | `/api/v1/members/{id}/section-permissions` | `section_permissions:manage` |
-| GET | `/api/v1/members/{id}/effective-permissions` | `members:manage` |
+| PUT | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}` | `members:manage` |
+| DELETE | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}` | `members:manage` |
+| GET/PUT | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}/section-access` | `section_permissions:manage` |
+| POST/GET/DELETE | `/api/v1/organizations/{org_id}/invitations` | `members:invite` / `members:manage` |
+| GET | `/api/v1/invitations/preview/{token}` | — (публично) |
 
 ---
 
 ## Этапы внедрения
 
-| Этап | Что реализуем |
-|------|---------------|
-| MVP | Org RBAC + account binding |
-| v1.1 | Section permissions + extension UI filtering |
-| v2 | MP proxy для WB (строгая изоляция credentials) |
-| v3 | MP proxy для Ozon, custom roles |
+| Этап | Что реализуем | Статус |
+|------|---------------|--------|
+| MVP | Org RBAC + account binding | ✅ |
+| v1.1 | Section permissions (6 групп WB) + manager-portal UI | ✅ |
+| v1.2 | WB Portal Proxy + JS guard + profile lock | ✅ |
+| v2 | Proxy для Ozon, custom roles | Планируется |

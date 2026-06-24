@@ -146,8 +146,11 @@ erDiagram
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `marketplace` | enum | `wildberries`, `ozon` |
-| `external_seller_id` | string | ID продавца на MP |
-| `display_name` | string | Человекочитаемое имя |
+| `external_seller_id` | string | Внутренний UUID (генерируется сервером при создании) |
+| `display_name` | string | Человекочитаемое имя кабинета (отображается в UI и в прокси WB) |
+| `is_active` | bool | `false` после деактивации (`DELETE`) |
+
+**Ограничение:** не более одного активного кабинета на маркетплейс в организации.
 
 ### UserMarketplaceAccount
 
@@ -167,7 +170,9 @@ erDiagram
 |------|-----|----------|
 | `user_id` | UUID | FK → User |
 | `marketplace_account_id` | UUID | FK → MarketplaceAccount |
-| `section_key` | string | `fin_analytics`, `ads`, `supplies`, ... |
+| `section_key` | string | `growth`, `products`, `shipments`, `analytics`, `promotion`, `finances` (WB) |
+| `can_read` | bool | Доступ на чтение раздела |
+| `can_write` | bool | Доступ на изменение (где применимо) |
 
 См. [Модель доступа к кабинетам MP](./marketplace-access-model.md).
 

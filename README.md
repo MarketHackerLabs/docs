@@ -38,4 +38,8 @@ MarketHacker — платформа для управления продажам
 
 ## Статус
 
-Документация отражает текущее состояние реализации. WB Portal Proxy реализован и развёрнут на `wb-proxy.markethacker.ru`.
+Документация отражает текущее состояние реализации (июнь 2025):
+
+- **WB Portal Proxy** — развёрнут на `wb-proxy.markethacker.ru`: reverse proxy, JS guard, 6 групп section permissions, блокировка профиля WB
+- **Manager Portal** — `team.markethacker.ru`: кабинеты, команда, приглашения, section grants, биллинг
+- **Безопасность прокси** — server-only cookies (`wbx-validation-key`, `x-supplier-id`) не попадают в браузер менеджера

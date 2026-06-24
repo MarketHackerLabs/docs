@@ -70,6 +70,19 @@ class MarketplaceCredential:
 
 В БД **никогда** не хранится plaintext. Расшифровка — только в application layer, результат **никогда** не отдаётся клиенту.
 
+### WB Portal Proxy — изоляция cookies
+
+Для portal-сессии Wildberries применяется дополнительное разделение:
+
+| Ключ | Браузер менеджера | Сервер прокси |
+|------|:-----------------:|:-------------:|
+| `authorizev3` / `WBTokenV3` | ✅ bootstrap | ✅ vault |
+| `wbx-validation-key` | ❌ | ✅ vault |
+| `x-supplier-id` | ❌ | ✅ vault |
+| `locale` | ✅ relay | ✅ merge |
+
+Сервер добавляет `SERVER_ONLY_COOKIE_KEYS` к каждому исходящему запросу к WB. Браузер менеджера не может прочитать или подменить эти значения. Подробнее: [WB Portal Proxy](./wb-portal-proxy.md#безопасность-credentials-в-прокси).
+
 ### Ротация ключей
 
 1. Новый ключ → `key_version = 2`.

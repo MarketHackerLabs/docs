@@ -89,15 +89,17 @@ Extension выполняет login и получает рабочий access tok
 
 ### Задачи
 
-- [ ] Модели: `MarketplaceAccount`, `MarketplaceCredential`
-- [ ] AES-256-GCM encryption service
-- [ ] `POST /marketplace-accounts` — привязка
-- [ ] `GET /marketplace-accounts` — список (без credentials)
-- [ ] `DELETE /marketplace-accounts/{id}` — отвязка
+- [x] Модели: `MarketplaceAccount`, `MarketplaceCredential`
+- [x] AES-256-GCM encryption service
+- [x] `POST /marketplace-accounts` — создание (`marketplace`, `display_name`; один кабинет на MP в org)
+- [x] `GET /marketplace-accounts` — список (без credentials)
+- [x] `DELETE /marketplace-accounts/{id}` — деактивация + отзыв proxy-сессий
+- [x] WB Portal Proxy — захват portal_session, reverse proxy, section guard
+- [x] Section permissions — 6 групп меню WB (`wb_menu_groups.py`)
+- [x] Приглашения с account grants и section permissions
 - [ ] ReBAC: `resource_access` table
-- [ ] Адаптеры: Wildberries API client (базовый)
+- [ ] Адаптеры: Wildberries API client (полная синхронизация)
 - [ ] Адаптеры: Ozon API client (базовый)
-- [ ] Валидация credentials при привязке
 
 ### Критерий готовности
 

@@ -50,10 +50,34 @@
 
 | Метод | Путь | Auth | Permission | Описание |
 |-------|------|:----:|------------|----------|
-| GET | `/api/v1/marketplace-accounts` | ✓ | `analytics:read` | Список аккаунтов |
-| POST | `/api/v1/marketplace-accounts` | ✓ | `marketplace:link` | Привязка |
-| GET | `/api/v1/marketplace-accounts/{id}` | ✓ | `analytics:read` | Детали |
-| DELETE | `/api/v1/marketplace-accounts/{id}` | ✓ | `marketplace:unlink` | Отвязка |
+| GET | `/api/v1/organizations/{org_id}/marketplace-accounts` | ✓ | member | Список кабинетов |
+| POST | `/api/v1/organizations/{org_id}/marketplace-accounts` | ✓ | `marketplace_accounts:write` | Создание (`marketplace`, `display_name`) |
+| PATCH | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | `marketplace_accounts:write` | Обновление `display_name` |
+| DELETE | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | `marketplace_accounts:write` | Деактивация кабинета |
+| POST | `.../capture-init` | ✓ | `marketplace_accounts:write` | Инициализация захвата WB-сессии |
+| POST | `.../verify` | ✓ | `marketplace_accounts:read` | Проверка credentials |
+| GET | `.../credentials-status` | ✓ | `marketplace_accounts:read` | Статус portal_session |
+| POST/DELETE | `.../access/{user_id}` | ✓ | `members:manage` | Назначение/отзыв менеджера на кабинет |
+| GET/PUT | `.../section-access` | ✓ | `section_permissions:manage` | Права на разделы WB |
+
+### Invitations
+
+| Метод | Путь | Auth | Permission | Описание |
+|-------|------|:----:|------------|----------|
+| GET | `/api/v1/organizations/{org_id}/invitations` | ✓ | `members:manage` | Ожидающие приглашения |
+| POST | `/api/v1/organizations/{org_id}/invitations` | ✓ | `members:invite` | Приглашение с role + account grants |
+| DELETE | `/api/v1/organizations/{org_id}/invitations/{id}` | ✓ | `members:manage` | Отзыв приглашения |
+| GET | `/api/v1/invitations/preview/{token}` | — | — | Превью приглашения (публично) |
+| POST | `/api/v1/invitations/accept` | — | — | Принятие приглашения (существующий user) |
+| POST | `/api/v1/invitations/accept-register` | — | — | Регистрация + принятие приглашения |
+
+### WB Portal Proxy
+
+| Метод | Путь | Auth | Описание |
+|-------|------|:----:|----------|
+| POST | `/api/v1/proxy/web-handshake` | ✓ | Создать proxy-сессию, получить `callback_url` |
+| GET | `/api/v1/proxy/portal/*` | cookie | Reverse proxy к seller.wildberries.ru |
+| POST | `/api/v1/proxy/capture/{token}` | — | Одноразовый endpoint для JS-сниппета захвата |
 
 ### Analytics
 

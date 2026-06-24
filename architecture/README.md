@@ -28,7 +28,8 @@ MarketHacker на первом этапе — **Chromium-расширение** 
 flowchart TB
     subgraph client [Клиенты]
         EXT[Chrome Extension]
-        WEB[Web Dashboard — будущее]
+        MP[Manager Portal]
+        PROXY[WB Portal Proxy]
     end
 
     subgraph api [API Layer]
@@ -52,7 +53,8 @@ flowchart TB
     end
 
     EXT -->|HTTPS + Bearer JWT| GW
-    WEB --> GW
+    MP --> GW
+    PROXY --> GW
     GW --> AUTH --> RBAC
     RBAC --> ORG & MP & ANALYTICS & BILLING
     ORG & MP & ANALYTICS --> PG
