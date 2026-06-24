@@ -12,6 +12,7 @@ MarketHacker — платформа для управления продажам
 | [backend](https://github.com/MarketHackerLabs/backend) | API-сервер (Python, FastAPI) + WB Portal Proxy |
 | [admin-panel](https://github.com/MarketHackerLabs/admin-panel) | Панель администратора (Next.js, `admin.markethacker.ru`) |
 | [manager-portal](https://github.com/MarketHackerLabs/manager-portal) | Портал менеджеров (Next.js, `team.markethacker.ru`) |
+| [parser](https://github.com/MarketHackerLabs/parser) | Платформа фоновых задач (Python, FastAPI, ARQ) |
 | **docs** (этот репозиторий) | Архитектура, спецификации, руководства |
 
 ## Содержание
@@ -29,6 +30,7 @@ MarketHacker — платформа для управления продажам
 - [Безопасность](./architecture/security.md)
 - [Дизайн API](./architecture/api-design.md)
 - [Фоновые задачи](./architecture/background-jobs.md)
+- [Parser Service](./architecture/parser.md) — платформа фоновых задач и аналитики
 - [Инфраструктура](./architecture/infrastructure.md)
 - [Дорожная карта](./architecture/roadmap.md)
 
