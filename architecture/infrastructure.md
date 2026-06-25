@@ -139,6 +139,11 @@ Internet :443
     ├── admin.markethacker.ru     → 127.0.0.1:3001  (Admin Panel, Next.js)
     ├── team.markethacker.ru      → 127.0.0.1:3002  (Manager Portal, Next.js)
     └── wb-proxy.markethacker.ru  → 127.0.0.1:8000  (WB Portal Proxy, FastAPI)
+
+Docker-сети (межсервисное):
+    backend api/worker ──markethacker_apps──► parser-api:8010, clickhouse:8123
+    backend api/worker ──markethacker_backend_infra──► postgres, pgbouncer, redis
+    parser api/worker  ──markethacker_parser_infra──► postgres, pgbouncer, redis, clickhouse
 ```
 
 > `wb-proxy.markethacker.ru` указывает на тот же FastAPI backend, Caddy переписывает путь:
@@ -148,12 +153,27 @@ Internet :443
 
 Каждый сервис разворачивается отдельным стеком из своего каталога:
 
-| Стек | Каталог | Compose-файл | Порт |
-|------|---------|--------------|------|
-| Backend API + Worker + DB | `backend/` | `docker-compose.yml` | 8000 |
+| Стек | Каталог | Compose-файл | Порт (127.0.0.1) |
+|------|---------|--------------|------------------|
+| Сети (bootstrap) | `infra/` | `make networks` | — |
+| Backend infra | `backend/` | `docker-compose.yml` | — |
+| Backend app | `backend/` | `docker-compose.prod.yml` | 8000 |
+| Parser infra | `parser/` | `docker-compose.yml` | — |
+| Parser app | `parser/` | `docker-compose.prod.yml` | 8010 |
 | Admin Panel | `admin-panel/` | `docker-compose.prod.yml` | 3001 |
 | Manager Portal | `manager-portal/` | `docker-compose.prod.yml` | 3002 |
 | Caddy | `caddy/` | `docker-compose.yml` | 80/443 |
+
+### Порядок деплоя на VPS
+
+```bash
+cd infra && make networks
+cd backend && make infra-up-prod && make prod-migrate && make prod-up
+cd parser && make infra-up-prod && make prod-migrate && make prod-up
+cd admin-panel && docker compose -f docker-compose.prod.yml up -d
+cd manager-portal && docker compose -f docker-compose.prod.yml up -d
+cd caddy && make up
+```
 
 ### Компоненты
 
