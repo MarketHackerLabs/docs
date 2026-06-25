@@ -141,7 +141,7 @@ Internet :443
     └── wb-proxy.markethacker.ru  → 127.0.0.1:8000  (WB Portal Proxy, FastAPI)
 
 Docker-сети (межсервисное):
-    backend api/worker ──markethacker_apps──► parser-api:8010, clickhouse:8123
+    backend api/worker ──markethacker_apps──► markethacker-parser-api:8010, clickhouse:8123
     backend api/worker ──markethacker_backend_infra──► postgres, pgbouncer, redis
     parser api/worker  ──markethacker_parser_infra──► postgres, pgbouncer, redis, clickhouse
 ```
