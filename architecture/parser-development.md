@@ -104,9 +104,11 @@ curl -X POST http://localhost:8010/api/v1/jobs/wb-search-tags \
   -H "Content-Type: application/json" \
   -d '{"interval": "yesterday"}'
 
+# Kafka UI (только локальная разработка): http://127.0.0.1:8085
+
 # Сообщения в топике (из контейнера Kafka)
 docker exec markethacker-parser-kafka \
-  /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
+  /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 \
   --topic markethacker.wb.search_tags \
   --from-beginning --max-messages 1
@@ -161,7 +163,7 @@ docker compose -f docker-compose.prod.yml logs worker | tail -50
 
 # Kafka topic
 docker exec markethacker-parser-kafka \
-  /opt/bitnami/kafka/bin/kafka-topics.sh \
+  /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 --list
 ```
 
