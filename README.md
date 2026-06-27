@@ -31,6 +31,7 @@ MarketHacker — платформа для управления продажам
 - [Дизайн API](./architecture/api-design.md)
 - [Фоновые задачи](./architecture/background-jobs.md)
 - [Parser Service](./architecture/parser.md) — платформа фоновых задач и аналитики
+- [Разработка парсеров](./architecture/parser-development.md) — Kafka, новые парсеры, чеклист деплоя
 - [Инфраструктура](./architecture/infrastructure.md)
 - [Дорожная карта](./architecture/roadmap.md)
 

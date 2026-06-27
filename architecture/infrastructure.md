@@ -143,7 +143,7 @@ Internet :443
 Docker-сети (межсервисное):
     backend api/worker ──markethacker_apps──► markethacker-parser-api:8010, clickhouse:8123
     backend api/worker ──markethacker_backend_infra──► postgres, pgbouncer, redis
-    parser api/worker  ──markethacker_parser_infra──► postgres, pgbouncer, redis, clickhouse
+    parser api/worker  ──markethacker_parser_infra──► postgres, pgbouncer, redis, clickhouse, kafka
 ```
 
 > `wb-proxy.markethacker.ru` указывает на тот же FastAPI backend, Caddy переписывает путь:

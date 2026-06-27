@@ -98,5 +98,7 @@ flowchart TB
 | [Безопасность](./security.md) | Шифрование, изоляция, audit |
 | [Дизайн API](./api-design.md) | Версионирование, эндпоинты, ошибки |
 | [Фоновые задачи](./background-jobs.md) | Синхронизация с маркетплейсами |
+| [Parser Service](./parser.md) | Платформа фоновых задач, Kafka → ClickHouse |
+| [Разработка парсеров](./parser-development.md) | Новые парсеры, включение Kafka |
 | [Инфраструктура](./infrastructure.md) | Docker, CI/CD, production |
 | [Дорожная карта](./roadmap.md) | Этапы реализации |

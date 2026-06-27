@@ -49,7 +49,8 @@ Python 3.11+
 | Микросервисы | Преждевременная сложность |
 | GraphQL | REST + OpenAPI достаточно для extension |
 | MongoDB | Связи org/user/role/account — реляционные |
-| Kafka | Redis + Celery покрывают объёмы MVP |
+
+> **Parser** использует Kafka отдельно от backend: worker → Kafka → ClickHouse (см. [Разработка парсеров](./parser-development.md)).
 
 ## Связь с клиентами
 
