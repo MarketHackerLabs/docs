@@ -281,7 +281,7 @@ CSS скрывает chip-элементы меню WB по `data-testid="menu.{
 
 ### Кастомизация через админ-панель
 
-Конфигурация хранится в `platform_settings.wb_portal_inject` и редактируется в **Админ-панель → WB Inject** (`/wb-portal-inject`).
+Конфигурация хранится в `platform_settings.wb_portal_inject` и редактируется в **Админ-панель → Team → Инжект WB** (`/team/wb-portal-inject`). Старый URL `/wb-portal-inject` перенаправляет на новый.
 
 | Возможность | Описание |
 |-------------|----------|
