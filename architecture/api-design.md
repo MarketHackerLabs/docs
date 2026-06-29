@@ -79,6 +79,23 @@
 | GET | `/api/v1/proxy/portal/*` | cookie | Reverse proxy к seller.wildberries.ru |
 | POST | `/api/v1/proxy/capture/{token}` | — | Одноразовый endpoint для JS-сниппета захвата |
 
+### Billing
+
+| Метод | Путь | Auth | Описание |
+|-------|------|:----:|----------|
+| GET | `/api/v1/billing/plans` | — | Список тарифов |
+| GET | `/api/v1/billing/subscription` | ✓ | Текущая подписка |
+| POST | `/api/v1/billing/subscription/upgrade` | ✓ | Оформление подписки (checkout) |
+| POST | `/api/v1/billing/subscription/cancel` | ✓ | Отмена подписки |
+| GET | `/api/v1/billing/usage` | ✓ | Использование лимитов |
+| GET | `/api/v1/billing/payment-methods` | ✓ | Сохранённые карты |
+| DELETE | `/api/v1/billing/payment-methods/{id}` | ✓ | Удаление карты |
+| POST | `/api/v1/billing/payments/{payment_id}/verify` | ✓ | Ручная сверка платежа ЮKassa |
+| POST | `/api/v1/billing/webhooks/yookassa` | IP | Webhook ЮKassa |
+| POST | `/api/v1/billing/webhooks/stripe` | Signature | Webhook Stripe |
+
+> Подробнее: [Биллинг и оплата](./billing.md)
+
 ### Analytics
 
 | Метод | Путь | Auth | Permission | Описание |

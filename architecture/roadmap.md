@@ -153,13 +153,15 @@ Extension отображает сводку аналитики для привя
 
 ### Задачи
 
-- [ ] Модель `Subscription` (plan, status, period)
-- [ ] Интеграция с платёжной системой (ЮKassa / Stripe)
-- [ ] Лимиты по plan (кол-во accounts, members)
-- [ ] ABAC: проверка plan при доступе к features
-- [ ] Webhook для payment events
-- [ ] `GET /billing/subscription` — текущий план
-- [ ] `POST /billing/checkout` — оформление подписки
+- [x] Модель `Subscription` (plan, status, period)
+- [x] Интеграция с платёжной системой (ЮKassa / Stripe)
+- [x] Лимиты по plan (кол-во accounts, members)
+- [x] ABAC: проверка plan при доступе к features
+- [x] Webhook для payment events
+- [x] Фоновая сверка статуса платежей (ARQ defer + cron)
+- [x] `GET /billing/subscription` — текущий план
+- [x] `POST /billing/subscription/upgrade` — оформление подписки
+- [x] `POST /billing/payments/{id}/verify` — ручная проверка оплаты
 
 ### Критерий готовности
 

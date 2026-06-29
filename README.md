@@ -29,6 +29,7 @@ MarketHacker — платформа для управления продажам
 - [Аутентификация и авторизация](./architecture/authentication.md)
 - [Безопасность](./architecture/security.md)
 - [Дизайн API](./architecture/api-design.md)
+- [Биллинг и оплата](./architecture/billing.md) — ЮKassa, webhook, фоновая сверка, автопродление
 - [Фоновые задачи](./architecture/background-jobs.md)
 - [Parser Service](./architecture/parser.md) — платформа фоновых задач и аналитики
 - [Разработка парсеров](./architecture/parser-development.md) — Kafka, новые парсеры, чеклист деплоя
@@ -45,4 +46,5 @@ MarketHacker — платформа для управления продажам
 
 - **WB Portal Proxy** — развёрнут на `wb-proxy.markethacker.ru`: reverse proxy, JS guard, 6 групп section permissions, блокировка профиля WB
 - **Manager Portal** — `team.markethacker.ru`: кабинеты, команда, приглашения, section grants, биллинг
+- **Биллинг** — ЮKassa (RUB) + Stripe, webhook, фоновая сверка платежей, автопродление
 - **Безопасность прокси** — server-only cookies (`wbx-validation-key`, `x-supplier-id`) не попадают в браузер менеджера
