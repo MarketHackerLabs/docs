@@ -29,7 +29,7 @@ MarketHacker — платформа для управления продажам
 - [Аутентификация и авторизация](./architecture/authentication.md)
 - [Безопасность](./architecture/security.md)
 - [Дизайн API](./architecture/api-design.md)
-- [Биллинг и оплата](./architecture/billing.md) — ЮKassa, webhook, фоновая сверка, автопродление
+- [Биллинг и оплата](./architecture/billing.md) — ЮKassa, webhook, промокоды, фоновая сверка, автопродление
 - [Фоновые задачи](./architecture/background-jobs.md)
 - [Parser Service](./architecture/parser.md) — платформа фоновых задач и аналитики
 - [Разработка парсеров](./architecture/parser-development.md) — Kafka, новые парсеры, чеклист деплоя

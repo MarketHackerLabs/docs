@@ -91,6 +91,8 @@
 | GET | `/api/v1/billing/payment-methods` | ✓ | Сохранённые карты |
 | DELETE | `/api/v1/billing/payment-methods/{id}` | ✓ | Удаление карты |
 | POST | `/api/v1/billing/payments/{payment_id}/verify` | ✓ | Ручная сверка платежа ЮKassa |
+| POST | `/api/v1/billing/promo/validate` | ✓ | Проверка промокода |
+| POST | `/api/v1/billing/promo/redeem` | ✓ | Активация промокода (trial / free_period / limits_boost) |
 | POST | `/api/v1/billing/webhooks/yookassa` | IP | Webhook ЮKassa |
 | POST | `/api/v1/billing/webhooks/stripe` | Signature | Webhook Stripe |
 

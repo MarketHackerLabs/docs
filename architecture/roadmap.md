@@ -162,6 +162,10 @@ Extension отображает сводку аналитики для привя
 - [x] `GET /billing/subscription` — текущий план
 - [x] `POST /billing/subscription/upgrade` — оформление подписки
 - [x] `POST /billing/payments/{id}/verify` — ручная проверка оплаты
+- [x] Промокоды: `discount`, `trial`, `free_period`, `limits_boost`
+- [x] `POST /billing/promo/validate`, `POST /billing/promo/redeem`
+- [x] Годовая подписка (`billing_period: yearly`) в checkout
+- [x] Admin CRUD промокодов (`/admin/billing/promo-codes`)
 
 ### Критерий готовности
 

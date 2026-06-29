@@ -75,7 +75,7 @@ flowchart BT
 | `permissions` | Роли, permissions, проверка доступа |
 | `marketplace_accounts` | Привязка WB/Ozon, хранение credentials |
 | `analytics` | Агрегаты, отчёты, read-only API для extension |
-| `billing` | Подписки, тарифы, лимиты, ЮKassa/Stripe |
+| `billing` | Подписки, тарифы, лимиты, промокоды, ЮKassa/Stripe |
 
 ## Shared и Infrastructure
 

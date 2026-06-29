@@ -97,7 +97,7 @@ flowchart TB
 | [Аутентификация](./authentication.md) | Потоки auth для extension, токены |
 | [Безопасность](./security.md) | Шифрование, изоляция, audit |
 | [Дизайн API](./api-design.md) | Версионирование, эндпоинты, ошибки |
-| [Биллинг и оплата](./billing.md) | Подписки, ЮKassa, webhook, фоновая сверка |
+| [Биллинг и оплата](./billing.md) | Подписки, промокоды, ЮKassa, webhook, фоновая сверка |
 | [Фоновые задачи](./background-jobs.md) | Синхронизация с маркетплейсами |
 | [Parser Service](./parser.md) | Платформа фоновых задач, Kafka → ClickHouse |
 | [Разработка парсеров](./parser-development.md) | Новые парсеры, включение Kafka |

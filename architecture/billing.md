@@ -20,6 +20,8 @@
 | `BillingPayment` | `billing_payments` | Запись платежа ЮKassa (идемпотентность, аудит) |
 | `BillingSavedPaymentMethod` | `billing_saved_payment_methods` | Сохранённая карта для автопродления |
 | `BillingUsageRecord` | `billing_usage_records` | Дневной учёт использования |
+| `PromoCode` | `promo_codes` | Каталог промокодов |
+| `PromoCodeRedemption` | `promo_code_redemptions` | Факт применения промокода пользователем |
 
 ## Поток оформления подписки (ЮKassa)
 
@@ -93,6 +95,8 @@ arq markethacker.infrastructure.jobs.WorkerSettings
 | GET | `/billing/payment-methods` | ✓ | Сохранённые карты ЮKassa |
 | DELETE | `/billing/payment-methods/{id}` | ✓ | Удаление сохранённой карты |
 | POST | `/billing/payments/{payment_id}/verify` | ✓ | **Ручная сверка платежа** |
+| POST | `/billing/promo/validate` | ✓ | Проверка промокода (без списания) |
+| POST | `/billing/promo/redeem` | ✓ | Активация промокода (trial / free_period / limits_boost) |
 
 `payment_id` — ID платежа ЮKassa из ответа `subscription/upgrade` (`CheckoutResponse.payment_id`).
 
@@ -102,10 +106,17 @@ arq markethacker.infrastructure.jobs.WorkerSettings
 {
   "plan_name": "pro",
   "provider": "yookassa",
+  "billing_period": "monthly",
+  "promo_code": "SUMMER20",
   "success_url": "https://team.markethacker.ru/billing/success",
   "cancel_url": "https://team.markethacker.ru/billing/cancel"
 }
 ```
+
+| Поле | Описание |
+|------|----------|
+| `billing_period` | `monthly` (30 дней) или `yearly` (365 дней). По умолчанию `monthly` |
+| `promo_code` | Опционально. Только для типа `discount` — скидка на **первый** платёж |
 
 Ответ:
 
@@ -139,6 +150,46 @@ arq markethacker.infrastructure.jobs.WorkerSettings
 
 Рекомендуется вызывать на странице `success_url` сразу после возврата пользователя с оплаты.
 
+#### POST /billing/promo/validate
+
+Проверяет промокод без изменения состояния. Для `discount` возвращает расчёт суммы.
+
+```json
+{
+  "code": "SUMMER20",
+  "plan_name": "pro",
+  "billing_period": "monthly"
+}
+```
+
+Пример ответа (скидка):
+
+```json
+{
+  "data": {
+    "code": "SUMMER20",
+    "promo_type": "discount",
+    "valid": true,
+    "plan_name": "pro",
+    "checkout_billing_period": "monthly",
+    "original_amount": "2990.00",
+    "discount_applied": "598.00",
+    "final_amount": "2392.00"
+  }
+}
+```
+
+#### POST /billing/promo/redeem
+
+Активирует промокод типов `trial`, `free_period`, `limits_boost`. Промокоды `discount` применяются только через `subscription/upgrade`.
+
+```json
+{
+  "code": "TRIAL14",
+  "plan_name": "pro"
+}
+```
+
 ### Webhook (`/api/v1/billing/webhooks/*`)
 
 | Метод | Путь | Auth | Описание |
@@ -163,7 +214,72 @@ Webhook проверяет IP отправителя (диапазоны ЮKassa
 | GET | `/admin/billing/finance/overview` | KPI, графики, воронка, разбивки |
 | GET | `/admin/billing/payments` | Реестр платежей ЮKassa |
 | POST | `/admin/billing/yookassa/test-payment` | Тестовый платёж 1 ₽ из админ-панели |
+| GET/POST/PATCH | `/admin/billing/promo-codes` | CRUD промокодов |
+| GET | `/admin/billing/promo-codes/{id}/redemptions` | История использований промокода |
 | GET/PATCH | `/admin/platform-settings` | Настройки ЮKassa (shop_id, рекуррент, VAT и т.д.) |
+
+## Промокоды
+
+### Типы
+
+| Тип | Описание | Как активируется |
+|-----|----------|------------------|
+| `discount` | Скидка % или фикс. сумма (₽) на первый платёж | `POST /billing/subscription/upgrade` с `promo_code` |
+| `trial` | N дней pro/enterprise, статус `trialing` | `POST /billing/promo/redeem` |
+| `free_period` | N дней активной подписки без оплаты | `POST /billing/promo/redeem` |
+| `limits_boost` | Временное увеличение лимитов тарифа | `POST /billing/promo/redeem` |
+
+### Ограничения промокода
+
+| Поле | Описание |
+|------|----------|
+| `max_uses` | Общий лимит использований (`null` = безлимит) |
+| `max_uses_per_user` | Лимит на пользователя (по умолчанию 1) |
+| `new_users_only` | Только пользователи без платной подписки/оплат (по умолчанию `true`, отключается в админке) |
+| `target_plan` | `pro`, `enterprise` или любой платный |
+| `billing_period` | Для `discount`: `monthly`, `yearly` или любой |
+| `valid_from` / `valid_until` | Окно действия |
+
+### Поток скидки (discount)
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API
+    participant YK as ЮKassa
+
+    Client->>API: POST /billing/promo/validate
+    API-->>Client: original_amount, final_amount
+
+    Client->>API: POST /billing/subscription/upgrade (promo_code)
+    API->>API: promo_code_redemptions (status=pending)
+    API->>YK: create_payment (со скидкой)
+    YK-->>API: payment.succeeded
+    API->>API: redemption → completed, uses_count++
+```
+
+- Скидка применяется **только к первому платежу**. Автопродление — по полной цене тарифа.
+- Минимальная сумма checkout после скидки — **1 ₽**.
+- Pending-redemption истекает через 24 ч, если checkout не завершён.
+
+### Буст лимитов (limits_boost)
+
+Активные бусты суммируются и применяются в `BillingService.get_effective_plan()` поверх лимитов текущего тарифа:
+
+- `boost_marketplace_accounts`
+- `boost_members`
+- `boost_organizations`
+- `boost_api_calls_per_day`
+
+Срок действия задаётся полем `boost_duration_days`.
+
+### Trial
+
+При истечении `trial_ends_at` подписка переводится в `cancelled`, пользователь получает лимиты free-тарифа (с учётом активных бустов).
+
+### Админ-панель
+
+Управление промокодами: **Биллинг → Промокоды** (`/billing/promo-codes`).
 
 ## Рекуррентные платежи (автопродление)
 
@@ -207,10 +323,15 @@ modules/billing/
 ├── api/                    # router, schemas
 ├── application/
 │   ├── service.py          # BillingService (фасад)
+│   ├── promo_service.py    # Валидация, redeem, скидки
+│   ├── limit_boosts.py     # Применение бустов к лимитам
 │   └── yookassa_service.py # Checkout, webhook, sync, renewals
-├── domain/models.py        # BillingPlan, Subscription, Payment, ...
+├── domain/
+│   ├── models.py           # BillingPlan, Subscription, Payment, PromoCode, ...
+│   └── promo.py            # Константы, расчёт скидки
 ├── infrastructure/
 │   ├── repository.py
+│   ├── promo_repository.py
 │   ├── yookassa_client.py  # Async HTTP-клиент API v3
 │   ├── yookassa_credentials.py
 │   └── yookassa_webhook.py # IP validation
@@ -237,4 +358,4 @@ if (paymentId) {
 }
 ```
 
-**Admin Panel** — тестовый платёж доступен в **Настройки → Оплата (ЮKassa) → Проверить интеграцию**.
+**Admin Panel** — тестовый платёж: **Настройки → Оплата (ЮKassa) → Проверить интеграцию**. Промокоды: **Биллинг → Промокоды**.
