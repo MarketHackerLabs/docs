@@ -160,6 +160,8 @@ Webhook проверяет IP отправителя (диапазоны ЮKassa
 |-------|------|----------|
 | GET/PATCH | `/admin/billing/plans` | Управление тарифами |
 | GET/PATCH | `/admin/billing/subscriptions` | Список и редактирование подписок |
+| GET | `/admin/billing/finance/overview` | KPI, графики, воронка, разбивки |
+| GET | `/admin/billing/payments` | Реестр платежей ЮKassa |
 | POST | `/admin/billing/yookassa/test-payment` | Тестовый платёж 1 ₽ из админ-панели |
 | GET/PATCH | `/admin/platform-settings` | Настройки ЮKassa (shop_id, рекуррент, VAT и т.д.) |
 
