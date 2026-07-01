@@ -95,6 +95,7 @@ Extension выполняет login и получает рабочий access tok
 - [x] `GET /marketplace-accounts` — список (без credentials)
 - [x] `DELETE /marketplace-accounts/{id}` — деактивация + отзыв proxy-сессий
 - [x] WB Portal Proxy — захват portal_session, reverse proxy, section guard
+- [x] Guided Connect — popup-привязка WB без DevTools, onboarding proxy
 - [x] Section permissions — 6 групп меню WB (`wb_menu_groups.py`)
 - [x] Приглашения с account grants и section permissions
 - [ ] ReBAC: `resource_access` table

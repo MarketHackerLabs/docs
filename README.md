@@ -25,7 +25,7 @@ MarketHacker — платформа для управления продажам
 - [Модель данных](./architecture/data-model.md)
 - [Контроль доступа](./architecture/access-control.md)
 - [Доступ к кабинетам MP](./architecture/marketplace-access-model.md) — section permissions, proxy, extension
-- [WB Portal Proxy](./architecture/wb-portal-proxy.md) — reverse proxy к seller.wildberries.ru, onboarding, JS-инжект
+- [WB Portal Proxy](./architecture/wb-portal-proxy.md) — reverse proxy к seller.wildberries.ru, Guided Connect, JS-инжект
 - [Аутентификация и авторизация](./architecture/authentication.md)
 - [Безопасность](./architecture/security.md)
 - [Дизайн API](./architecture/api-design.md)
@@ -43,10 +43,11 @@ MarketHacker — платформа для управления продажам
 
 ## Статус
 
-Документация отражает текущее состояние реализации (июнь 2026):
+Документация отражает текущее состояние реализации (июль 2026):
 
 - **WB Portal Proxy** — развёрнут на `wb-proxy.markethacker.ru`: reverse proxy, JS guard, 6 групп section permissions, блокировка профиля WB
-- **Manager Portal** — `team.markethacker.ru`: кабинеты, команда, приглашения, section grants, биллинг
+- **Guided Connect** — привязка WB-сессии через popup без DevTools; HttpOnly cookies накапливаются server-side
+- **Manager Portal** — `team.markethacker.ru`: кабинеты, команда, приглашения, section grants, биллинг, `WbConnectModal`
 - **Биллинг** — ЮKassa (RUB) + Stripe, webhook, фоновая сверка платежей, автопродление
 - **Search Tags API** — `GET /api/v1/search-tags/queries` и `/queries/monthly`: read-only данные парсера WB из ClickHouse, право `search_tags:read`
 - **Кэширование** — Redis response cache для read-only данных (ClickHouse, каталоги PG), декоратор `@cached_read`

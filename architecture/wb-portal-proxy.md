@@ -11,8 +11,8 @@ WB Portal Proxy позволяет менеджерам работать в ли
 | Проблема | Решение |
 |----------|---------|
 | Менеджер не должен знать API-ключ или cookies владельца | Credentials хранятся на сервере, менеджер их не видит |
-| WB SPA требует живую сессию (JWT + cookies) | Владелец делает однократный «захват» сессии через JS-сниппет |
-| WB использует HttpOnly-cookies (`wbx-validation-key`) | Захват вручную при onboarding; cookie **не попадает в браузер менеджера** — только server-side |
+| WB SPA требует живую сессию (JWT + cookies) | Владелец делает однократный «захват» сессии через **Guided Connect** (popup) или JS-сниппет (fallback) |
+| WB использует HttpOnly-cookies (`wbx-validation-key`) | При Guided Connect прокси накапливает HttpOnly cookies server-side; cookie **не попадает в браузер менеджера** |
 | Менеджер не должен переключать компанию / выходить из WB | Селектор профиля заменён статическим текстом; модалка «Профиль» заблокирована |
 | WB SPA пытается выйти из сессии и редиректить на auth | JS-инжект блокирует logoff и auth-редиректы |
 
@@ -41,7 +41,9 @@ team.markethacker.ru          wb-proxy.markethacker.ru
 | Компонент | Технология | Описание |
 |-----------|------------|----------|
 | `wb-proxy.markethacker.ru` | Caddy → FastAPI | Публичный домен прокси |
-| `portal_router.py` | FastAPI | Маршрутизация всех запросов к WB |
+| `portal_router.py` | FastAPI | Маршрутизация всех запросов к WB, guided connect |
+| `portal_onboarding.py` | Python | Onboarding proxy: захват без DevTools |
+| `portal_root_assets.py` + middleware | Python | Root-запросы WB (`/index.html`, `/auth/*`) во время connect |
 | `portal_service.py` | Python | Бизнес-логика: сессии, права доступа |
 | `wb_portal_client.py` | httpx | HTTP-клиент к `seller.wildberries.ru` и субдоменам |
 | `portal_inject.py` | JS → HTML | JS-скрипт, инжектируемый в HTML-ответы WB |
@@ -98,33 +100,65 @@ WB SPA использует:
 - `wbx-validation-key` — HttpOnly-cookie (недоступна JS)
 - `x-supplier-id` — ID поставщика в cookies и `localStorage`
 
-Так как `wbx-validation-key` помечена HttpOnly, её невозможно захватить программно через `document.cookie`. Поэтому захват делается в два шага.
+### Guided Connect (рекомендуемый способ)
 
-### Шаг 1 — Автоматический захват через JS-сниппет
+Владелец привязывает кабинет **без DevTools**: popup с логином WB через onboarding proxy.
 
-1. Владелец открывает `seller.wildberries.ru` и входит.
-2. В manager-portal нажимает **«Привязать WB»** → получает одноразовый сниппет.
-3. Вставляет сниппет в **DevTools Console** на `seller.wildberries.ru`.
-4. Сниппет читает `authorizev3` из `localStorage` и остальные cookies из `document.cookie`.
+```mermaid
+sequenceDiagram
+    participant O as Владелец (manager-portal)
+    participant API as api.markethacker.ru
+    participant Popup as Popup (WB proxy)
+    participant WB as seller.wildberries.ru
 
-### Шаг 2 — Ручной захват `wbx-validation-key`
+    O->>API: POST .../capture-init
+    API-->>O: capture_token, connect_url, snippet (fallback)
 
-Сниппет показывает `prompt()` с инструкцией:
+    O->>Popup: window.open(connect_url)
+    Popup->>API: GET /connect/{token}
+    API-->>Popup: 302 + Set-Cookie mh_wb_connect + redirect на __auth__/ru/
 
+    Note over Popup,WB: Onboarding proxy: URL rewriter, накопление HttpOnly cookies в Redis
+
+    Popup->>WB: Логин (телефон + SMS)
+    WB-->>Popup: authorizev3 в localStorage, Set-Cookie (HttpOnly)
+
+    Popup->>API: POST /proxy/capture/{token} (auto-script)
+    API->>API: merge cookies, encrypt, save portal_session
+    API-->>Popup: ok + delete mh_wb_connect
+
+    Popup->>O: postMessage mh-wb-capture-success
+    O->>O: poll credentials-status, закрыть модалку
 ```
-Шаг 2 — wbx-validation-key (HttpOnly, недоступна JS):
 
-DevTools (F12) → Application → Cookies → seller.wildberries.ru
-Найдите wbx-validation-key и скопируйте значение.
-Или нажмите Отмена чтобы пропустить:
-```
+| Шаг | Endpoint / действие | Описание |
+|-----|---------------------|----------|
+| 1 | `POST .../capture-init` | Одноразовый `capture_token` в Redis (TTL 30 мин), `connect_url` |
+| 2 | `GET /proxy/portal/connect/{token}` | Cookie `mh_wb_connect`, редирект на `__auth__/ru/` |
+| 3 | Onboarding proxy | Проксирует seller-auth и seller portal, копит `Set-Cookie` в Redis |
+| 4 | `POST /proxy/capture/{token}` | JS auto-capture: JWT + cookies + накопленные HttpOnly |
+| 5 | `GET .../credentials-status` | Manager-portal poll: `has_portal_session`, `portal_session_saved_at` |
 
-Пользователь:
-1. Открывает **DevTools → Application → Cookies → seller.wildberries.ru**.
-2. Находит строку `wbx-validation-key`, копирует Value.
-3. Вставляет в prompt.
+**Cookies guided connect:**
 
-После этого сниппет отправляет `{authorizev3, cookies}` на одноразовый capture-endpoint.
+| Cookie | Path | Назначение |
+|--------|------|------------|
+| `mh_wb_connect` | `/` | Временный capture-токен во время popup-логина |
+| `mh_portal_token` | `/api/v1/proxy/portal` (dev) или `/` (prod) | Сессия менеджера в прокси после web-handshake |
+
+После успешного capture `mh_wb_connect` удаляется (done-страница, ответ capture, или при следующем запросе к portal proxy, если токен уже потреблён). Просроченная `mh_wb_connect` **не блокирует** `mh_portal_token`.
+
+**Manager-portal:** компонент `WbConnectModal` — popup без `noopener` (для `postMessage`), poll `credentials-status` по `portal_session_saved_at`, ручной сниппет в collapsible «DevTools».
+
+### Fallback: JS-сниппет (DevTools)
+
+Если Guided Connect не сработал, владелец может использовать сниппет из `capture-init`:
+
+1. Открыть `seller.wildberries.ru` и войти.
+2. Вставить сниппет в **DevTools Console**.
+3. Сниппет читает `authorizev3` из `localStorage` и cookies из `document.cookie`.
+4. Вручную скопировать `wbx-validation-key` из DevTools → Application → Cookies (prompt).
+5. Отправить `{authorizev3, cookies}` на `POST /proxy/capture/{token}`.
 
 ### Хранение credentials
 
@@ -156,14 +190,17 @@ DevTools (F12) → Application → Cookies → seller.wildberries.ru
 1. web-handshake → создать proxy_session в Redis (TTL 1h)
                    → создать одноразовый callback_token (TTL 5m)
 2. /auth/callback → exchange callback_token → установить cookie mh_portal_token
-3. /{path} → проверить cookie mh_portal_token → загрузить portal_auth из DB
+3. /{path} → проверить cookie: валидный mh_wb_connect → onboarding;
+             иначе mh_portal_token → загрузить portal_auth из DB
 ```
 
 | Сущность | Хранилище | TTL |
 |----------|-----------|-----|
 | `proxy_session` | Redis | 1 час |
 | `callback_token` | Redis | 5 минут |
+| `portal_capture` (+ cookies) | Redis | 30 минут (guided connect) |
 | `mh_portal_token` | Cookie (браузер) | 1 час |
+| `mh_wb_connect` | Cookie (браузер) | до завершения capture / 30 мин |
 | `portal_session` credentials | PostgreSQL (AES-256-GCM) | бессрочно |
 
 ---
@@ -383,9 +420,12 @@ CORS_ORIGINS=["https://team.markethacker.ru","https://wb-proxy.markethacker.ru",
 
 | Проблема | Статус |
 |----------|--------|
-| `wbx-validation-key` HttpOnly — нельзя захватить автоматически | Захват вручную через DevTools при onboarding; хранится только на сервере |
+| `wbx-validation-key` HttpOnly — нельзя захватить через JS | Guided Connect: server-side накопление; fallback — DevTools prompt |
 | Секретные cookies в браузере менеджера | `SERVER_ONLY_COOKIE_KEYS` — не инжектятся и не relay'ятся из браузера |
-| WB SPA обновляет токен через `slide-v3` | JS динамически читает `getToken()` из localStorage |
+| Stale `mh_wb_connect` после capture | Игнорируется при наличии `mh_portal_token`; cookie сбрасывается в ответе |
+| WB Service Worker кэширует HTML | SW отключён (noop) во время onboarding |
+| `/auth/*` на корне origin при connect | `WbPortalRootAssetMiddleware` + root asset proxy |
+| WB SPA обновляет токен через `slide-v3` | Onboarding bootstrap вызывает slide-v3 на seller portal |
 | WB периодически сбрасывает localStorage | `setInterval` каждые 500ms восстанавливает токены |
 | WB возвращает `401` на ABAC/validate без `wbx-validation-key` | Конвертируется в `204` чтобы WB не инициировал logoff |
 | Селектор профиля WB (смена компании, выход) | Заменён статическим текстом; модалка заблокирована |
@@ -398,13 +438,18 @@ CORS_ORIGINS=["https://team.markethacker.ru","https://wb-proxy.markethacker.ru",
 
 | Файл | Назначение |
 |------|------------|
-| `backend/src/markethacker/modules/proxy/api/portal_router.py` | FastAPI routes, Set-Cookie relay |
+| `backend/src/markethacker/modules/proxy/api/portal_router.py` | FastAPI routes, connect/done, Set-Cookie relay |
+| `backend/src/markethacker/modules/proxy/api/portal_root_middleware.py` | ASGI middleware для root-запросов WB |
+| `backend/src/markethacker/modules/proxy/application/portal_onboarding.py` | Onboarding proxy (guided connect) |
+| `backend/src/markethacker/modules/proxy/application/portal_root_assets.py` | Проксирование `/index.html`, `/auth/*`, assets |
 | `backend/src/markethacker/modules/proxy/application/portal_service.py` | Бизнес-логика, сессии |
-| `backend/src/markethacker/modules/proxy/application/portal_inject.py` | JS bootstrap + guard scripts |
+| `backend/src/markethacker/modules/proxy/application/portal_inject.py` | JS bootstrap + guard + capture auto-script |
+| `backend/src/markethacker/infrastructure/cache/portal_capture.py` | Redis: capture token + накопленные cookies |
 | `backend/src/markethacker/modules/proxy/infrastructure/wb_portal_client.py` | HTTP-клиент к WB |
 | `backend/src/markethacker/modules/proxy/domain/wb_hosts.py` | Маппинг субдоменов |
 | `backend/src/markethacker/modules/proxy/domain/portal_auth.py` | Парсинг/сериализация credentials |
 | `backend/src/markethacker/modules/proxy/domain/wb_portal_routes.py` | Известные WB API пути + section_key |
 | `caddy/Caddyfile` | Reverse proxy конфигурация |
 | `backend/src/markethacker/modules/marketplace_accounts/domain/wb_menu_groups.py` | 6 групп меню WB, chip-id, path prefixes |
-| `manager-portal/src/app/(manager)/accounts/[id]/page.tsx` | UI захвата сессии, section grants, менеджеры |
+| `manager-portal/src/components/wb-connect-modal.tsx` | UI Guided Connect (popup, poll, fallback snippet) |
+| `manager-portal/src/app/(manager)/accounts/[id]/page.tsx` | Карточка кабинета, section grants, менеджеры |

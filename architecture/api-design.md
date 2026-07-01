@@ -54,9 +54,9 @@
 | POST | `/api/v1/organizations/{org_id}/marketplace-accounts` | ✓ | `marketplace_accounts:write` | Создание (`marketplace`, `display_name`) |
 | PATCH | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | `marketplace_accounts:write` | Обновление `display_name` |
 | DELETE | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | `marketplace_accounts:write` | Деактивация кабинета |
-| POST | `.../capture-init` | ✓ | `marketplace_accounts:write` | Инициализация захвата WB-сессии |
+| POST | `.../capture-init` | ✓ | `marketplace_accounts:write` | Guided Connect: `capture_token`, `connect_url`, `snippet` |
 | POST | `.../verify` | ✓ | `marketplace_accounts:read` | Проверка credentials |
-| GET | `.../credentials-status` | ✓ | `marketplace_accounts:read` | Статус portal_session |
+| GET | `.../credentials-status` | ✓ | `marketplace_accounts:read` | `has_portal_session`, `portal_session_saved_at` |
 | POST/DELETE | `.../access/{user_id}` | ✓ | `members:manage` | Назначение/отзыв менеджера на кабинет |
 | GET/PUT | `.../section-access` | ✓ | `section_permissions:manage` | Права на разделы WB |
 
@@ -76,8 +76,10 @@
 | Метод | Путь | Auth | Описание |
 |-------|------|:----:|----------|
 | POST | `/api/v1/proxy/web-handshake` | ✓ | Создать proxy-сессию, получить `callback_url` |
+| GET | `/api/v1/proxy/portal/connect/{token}` | — | Начать Guided Connect (Set-Cookie `mh_wb_connect`) |
+| GET | `/api/v1/proxy/portal/connect/{token}/done` | — | Страница успеха, `postMessage` в opener |
 | GET | `/api/v1/proxy/portal/*` | cookie | Reverse proxy к seller.wildberries.ru |
-| POST | `/api/v1/proxy/capture/{token}` | — | Одноразовый endpoint для JS-сниппета захвата |
+| POST | `/api/v1/proxy/capture/{token}` | — | Одноразовый endpoint захвата (auto-script / snippet) |
 
 ### Billing
 

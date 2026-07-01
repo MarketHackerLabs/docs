@@ -108,7 +108,7 @@ PUT /api/v1/members/{user_id}/marketplace-accounts
 
 Типы credentials:
 
-- **portal_session** — cookies + JWT для WB Portal Proxy (захват через JS-сниппет)
+- **portal_session** — cookies + JWT для WB Portal Proxy (Guided Connect или JS-сниппет)
 - **api_token** — опционально, для серверной синхронизации данных (не требуется при создании кабинета)
 
 Проверка валидности: `POST /marketplace-accounts/{id}/verify`, `GET /marketplace-accounts/{id}/credentials-status`.
