@@ -384,11 +384,13 @@ JS guard-скрипт (`build_portal_inject_script`) дополнительно 
 
 ```env
 WB_PORTAL_PUBLIC_BASE_URL=https://wb-proxy.markethacker.ru
-WB_PORTAL_COOKIE_PATH=/
-WB_PORTAL_COOKIE_SECURE=true
 ```
 
-> ⚠️ `WB_PORTAL_COOKIE_PATH=/` обязателен. Без него cookie `mh_portal_token` устанавливается с `path=/api/v1/proxy/portal`, но браузер отправляет запросы к `wb-proxy.markethacker.ru/` (корень) — и кука не передаётся.
+Path и `Secure` для `mh_portal_token` **выводятся автоматически** из `WB_PORTAL_PUBLIC_BASE_URL`:
+- dedicated subdomain (`https://wb-proxy...`) → `Path=/`, `Secure=true`
+- dev на API-префиксе (`.../api/v1/proxy/portal`) → `Path=/api/v1/proxy/portal`
+
+> ⚠️ Раньше при `WB_PORTAL_COOKIE_PATH=/api/v1/proxy/portal` на production браузер не отправлял cookie на `wb-proxy.markethacker.ru/` — отсюда ошибка «Требуется сессия portal proxy (cookie)».
 
 ### Caddy (`caddy/Caddyfile`)
 
