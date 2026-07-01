@@ -7,7 +7,7 @@
 - загрузка заказов и продаж;
 - синхронизация рекламных кампаний;
 - обновление токенов маркетплейсов;
-- агрегация аналитики.
+- агрегация данных MP (планируется).
 
 ## Архитектура
 
@@ -27,7 +27,7 @@ flowchart LR
 | `sync_marketplace_orders` | каждые 15 мин | Загрузка новых заказов |
 | `sync_ad_campaigns` | каждые 30 мин | Синхронизация рекламных кампаний |
 | `refresh_marketplace_tokens` | по событию / cron | Обновление OAuth/API токенов MP |
-| `aggregate_analytics` | каждый час | Пересчёт агрегатов для дашборда |
+| `aggregate_analytics` | — | Планируется (не реализовано; Search Tags читает CH напрямую) |
 | `reencrypt_credentials` | по событию | Ротация ключей шифрования |
 | `sync_yookassa_payment` | defer (3 мин) | Сверка одного платежа ЮKassa после checkout |
 | `process_pending_yookassa_payments` | каждые 5 мин | Сверка всех незавершённых платежей ЮKassa |

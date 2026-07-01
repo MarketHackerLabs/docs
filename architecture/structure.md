@@ -86,17 +86,42 @@ flowchart BT
 
 ### `shared/`
 
-- Базовые исключения (`NotFoundError`, `PermissionDeniedError`)
-- Общие типы (`UUID`, пагинация)
+- Базовые исключения (`NotFoundError`, `PermissionDeniedError`, `ClickHouseUnavailableError`)
+- Общие схемы: `PaginatedResponse`, `MetricDelta`, `APIResponse`
+- Утилиты метрик: `shared/metrics.py` (`count_metric_delta`, `rate_metric_delta`)
 - Утилиты (datetime, id generation)
 
 ### `infrastructure/`
 
 - `database/` — SQLAlchemy engine, session factory, base model
 - `cache/` — Redis client, JSON cache-aside, декоратор `@cached_read` (см. [Кэширование](./caching.md))
-- `clickhouse/` — read-only клиент для данных парсера
+- `clickhouse/` — общий read-only слой для данных парсера:
+  - `client.py` — singleton `clickhouse_connect`
+  - `support.py` — `require_clickhouse_client()`, `build_where_clause()`, парсеры типов
+  - `tables.py` — имена таблиц (`WB_SEARCH_TAGS_TABLE`)
 - `security/` — JWT, encryption, password hashing
 - `jobs/` — ARQ worker
+
+### ClickHouse в модулях
+
+SQL и read models живут **в модуле-владельце**, не в общем repository:
+
+```
+modules/search_tags/infrastructure/clickhouse/
+├── models.py
+├── mappers.py
+└── queries/
+    ├── list_search_queries.py          # Query.execute() + @cached_read fetch()
+    └── get_latest_monthly_by_query.py
+
+modules/admin/infrastructure/clickhouse/
+├── models.py
+├── mappers.py
+└── queries/
+    └── list_parser_wb_search_tags.py   # с фильтрами auth_profile / org / account
+```
+
+Поток: `api/router` → `application/service` → `query.fetch()` (кэш) → `Query.execute()` (sync `client.query`) → `mappers`. Синхронный клиент не блокирует event loop: `@cached_read(sync=True)` выполняет `execute()` в thread pool.
 
 ## Конфигурация
 

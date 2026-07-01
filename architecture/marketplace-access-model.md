@@ -312,7 +312,7 @@ CREATE TABLE user_marketplace_section_access (
     "promotion": { "can_read": true, "can_write": true },
     "shipments": { "can_read": true, "can_write": false }
   },
-  "permissions": ["analytics:read"]
+  "permissions": ["search_tags:read"]
 }
 ```
 

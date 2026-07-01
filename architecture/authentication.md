@@ -26,7 +26,7 @@ sequenceDiagram
 
     Note over EXT: Токены в chrome.storage.session
 
-    EXT->>API: GET /analytics (Authorization: Bearer ...)
+    EXT->>API: GET /search-tags/queries (Authorization: Bearer ...)
     API->>AUTH: validate JWT + permissions
     API-->>EXT: data
 
@@ -52,7 +52,7 @@ sequenceDiagram
 {
   "sub": "user_uuid",
   "org_id": "current_org_uuid",
-  "permissions": ["analytics:read", "ads:write"],
+  "permissions": ["search_tags:read", "ads:write"],
   "iat": 1710000000,
   "exp": 1710000900,
   "jti": "unique_token_id"

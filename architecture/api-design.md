@@ -98,12 +98,27 @@
 
 > Подробнее: [Биллинг и оплата](./billing.md)
 
-### Analytics
+### Search Tags (WB)
+
+Данные парсера из ClickHouse. **Платформенные** — без привязки к org или кабинету MP. Требуют право `search_tags:read` (все системные роли). На тарифах `pro` / `enterprise` включена фича `search_tags` в `billing_plans.features`.
 
 | Метод | Путь | Auth | Permission | Описание |
 |-------|------|:----:|------------|----------|
-| GET | `/api/v1/analytics/summary` | ✓ | `analytics:read` | Сводка |
-| GET | `/api/v1/analytics/campaigns` | ✓ | `ads:read` | Рекламные кампании |
+| GET | `/api/v1/search-tags/queries` | ✓ | `search_tags:read` | Постраничный список запросов с частотой |
+| GET | `/api/v1/search-tags/queries/monthly` | ✓ | `search_tags:read` | Monthly-аналитика по точному query |
+
+**Query-параметры списка:** `interval`, `since`, `until`, `query` (подстрока), `page`, `limit`.
+
+**Monthly-ответ:** метрики с `MetricDelta` (value, previous, diff, diff_percent) — frequency, CTR, конверсии, orders, avg_frequency, subjects_with_orders, top_order_subject. CTR = open_to_card / frequency × 100.
+
+Источник: таблица `wb_search_tags` (+ join `wb_subjects_dict` для названия предмета). Кэш: `@cached_read` (TTL 30 / 15 мин). См. [Кэширование](./caching.md), [Parser Service](./parser.md).
+
+### Admin — Parser / ClickHouse
+
+| Метод | Путь | Auth | Описание |
+|-------|------|:----:|----------|
+| GET | `/api/v1/admin/parser/wb-search-tags` | superuser | Список строк из ClickHouse с фильтрами org/account/auth_profile |
+| POST | `/api/v1/admin/parser/jobs/wb-search-tags` | superuser | Запуск job парсера (deprecated, использовать `/admin/parser/jobs`) |
 
 ### Health
 
@@ -127,11 +142,26 @@
 
 ### Список с пагинацией
 
+**Offset-пагинация** (search tags, admin parser, часть admin CRUD):
+
 ```json
 {
   "data": [ ... ],
   "meta": {
-    "request_id": "uuid",
+    "total": 1250,
+    "page": 1,
+    "page_size": 50,
+    "has_next": true
+  }
+}
+```
+
+**Cursor-пагинация** (планируется для больших списков с MP-sync):
+
+```json
+{
+  "data": [ ... ],
+  "meta": {
     "cursor": "next_cursor_value",
     "has_more": true
   }
@@ -214,4 +244,4 @@ async function apiClient<T>(path: string, options?: RequestInit): Promise<T> {
 
 - Доступен по `/openapi.json` и `/docs` (Swagger UI).
 - В production `/docs` отключён или защищён.
-- Tags соответствуют модулям: `auth`, `users`, `organizations`, `marketplace`, `analytics`.
+- Tags соответствуют модулям: `auth`, `users`, `organizations`, `marketplace`, `search-tags`, `billing`, `admin`.

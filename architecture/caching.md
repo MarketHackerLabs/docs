@@ -66,7 +66,7 @@ modules/admin/infrastructure/clickhouse/queries/
 └── list_parser_wb_search_tags.py   # @cached_read на fetch(), TTL 20 мин
 ```
 
-Синхронный `Query.execute()` остаётся без кэша; публичная точка входа — декорированная `fetch()` (async, `sync=True` внутри декоратора).
+Синхронный `Query.execute()` остаётся без кэша; публичная точка входа — декорированная `fetch()` (async-обёртка: `sync=True` запускает `execute()` в thread pool).
 
 ### PostgreSQL — файл на операцию
 

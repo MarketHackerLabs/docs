@@ -8,7 +8,7 @@ MarketHacker использует **трёхуровневую** модель д
 flowchart TB
     subgraph L1 [Уровень 1 — Организация]
         MEM[Membership + Role]
-        PERM[Permissions: analytics:read, ads:write...]
+        PERM[Permissions: search_tags:read, ads:write...]
     end
 
     subgraph L2 [Уровень 2 — Кабинет MP]
@@ -61,13 +61,14 @@ flowchart TB
 | `marketplace:link` | ✓ | ✓ | — | — |
 | `marketplace:unlink` | ✓ | ✓ | — | — |
 | `section_permissions:manage` | ✓ | ✓ | — | — |
-| `analytics:read` | ✓ | ✓ | ✓ | ✓ |
-| `analytics:export` | ✓ | ✓ | ✓ | — |
+| `search_tags:read` | ✓ | ✓ | ✓ | ✓ |
 | `ads:read` | ✓ | ✓ | ✓ | ✓ |
 | `ads:write` | ✓ | ✓ | ✓ | — |
 | `credentials:view` | ✓ | ✓ | — | — |
 
 Permissions хранятся в БД (`role_permissions`), не хардкодятся в коде.
+
+> **Не путать:** `search_tags:read` — доступ к API MarketHacker (`/search-tags/*`). Ключ `analytics` в `section_permissions` — раздел меню WB Portal (`seller.wildberries.ru`), это отдельный уровень доступа.
 
 ---
 
@@ -174,7 +175,7 @@ async def authorize_marketplace_access(
   "org_id": "org_uuid",
   "marketplace_account_id": "account_uuid",
   "marketplace": "wildberries",
-  "permissions": ["analytics:read", "ads:write"],
+  "permissions": ["search_tags:read", "ads:write"],
   "section_permissions": {
     "analytics": { "can_read": true, "can_write": false },
     "promotion": { "can_read": true, "can_write": true }

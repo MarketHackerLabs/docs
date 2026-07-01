@@ -9,6 +9,7 @@ Python 3.11+
 ├── Alembic          — миграции
 ├── Pydantic v2      — валидация, settings
 ├── PostgreSQL 16    — основное хранилище
+├── ClickHouse       — аналитика парсера (read-only из backend)
 ├── Redis            — сессии, rate limit, кэш, очереди
 ├── Celery / ARQ     — фоновые задачи (синк с MP)
 └── uv               — управление зависимостями
@@ -51,7 +52,7 @@ Python 3.11+
 | GraphQL | REST + OpenAPI достаточно для extension |
 | MongoDB | Связи org/user/role/account — реляционные |
 
-> **Parser** использует Kafka отдельно от backend: worker → Kafka → ClickHouse (см. [Разработка парсеров](./parser-development.md)).
+> **Parser** пишет в ClickHouse через Kafka (worker → Kafka → CH). **Backend** читает CH синхронным `clickhouse_connect` + `@cached_read(sync=True)` — без блокировки event loop. См. [Разработка парсеров](./parser-development.md), [Структура проекта](./structure.md).
 
 ## Связь с клиентами
 

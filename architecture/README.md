@@ -7,7 +7,7 @@ MarketHacker на первом этапе — **Chromium-расширение** 
 - аутентификацию и управление пользователями;
 - мультиарендность (команды, организации);
 - привязку и хранение аккаунтов маркетплейсов;
-- аналитику и синхронизацию данных;
+- аналитику поисковых запросов WB (данные парсера);
 - биллинг и лимиты по тарифам.
 
 Расширение работает с доменами `wildberries.ru` и `ozon.ru` (см. `host_permissions` в manifest расширения).
@@ -41,13 +41,14 @@ flowchart TB
     subgraph domain [Domain Modules]
         ORG[Organizations]
         MP[Marketplace Accounts]
-        ANALYTICS[Analytics]
+        TAGS[Search Tags]
         BILLING[Billing]
         JOBS[Background Jobs]
     end
 
     subgraph infra [Infrastructure]
         PG[(PostgreSQL)]
+        CH[(ClickHouse)]
         REDIS[(Redis)]
         VAULT[Secrets / Encryption]
     end
@@ -56,8 +57,9 @@ flowchart TB
     MP --> GW
     PROXY --> GW
     GW --> AUTH --> RBAC
-    RBAC --> ORG & MP & ANALYTICS & BILLING
-    ORG & MP & ANALYTICS --> PG
+    RBAC --> ORG & MP & TAGS & BILLING
+    ORG & MP --> PG
+    TAGS --> CH
     AUTH --> REDIS
     JOBS --> REDIS
     MP --> VAULT

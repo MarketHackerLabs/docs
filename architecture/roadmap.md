@@ -8,7 +8,7 @@
 | 1 | Auth | Extension может логиниться |
 | 2 | Orgs + RBAC | Мультиарендность, роли |
 | 3 | Marketplace Accounts | Привязка WB/Ozon |
-| 4 | Analytics API | Extension показывает данные |
+| 4 | Search Tags API | Extension показывает поисковые запросы WB |
 | 5 | Background Jobs | Актуальные данные с MP |
 | 6 | Billing | Монетизация |
 
@@ -107,22 +107,26 @@ Extension выполняет login и получает рабочий access tok
 
 ---
 
-## Этап 4: Analytics API
+## Этап 4: Search Tags API
 
-**Цель:** первые read-only эндпоинты — extension показывает данные.
+**Цель:** read-only API по поисковым запросам WB из ClickHouse (данные парсера).
 
 ### Задачи
 
-- [ ] `GET /analytics/summary` — сводка по org/account
-- [ ] `GET /analytics/campaigns` — рекламные кампании
-- [ ] Пагинация (cursor-based)
-- [ ] OpenAPI spec опубликован
+- [x] Модуль `search_tags` — query objects, mappers, service
+- [x] `GET /search-tags/queries` — постраничный список с фильтрами
+- [x] `GET /search-tags/queries/monthly` — метрики с `MetricDelta`
+- [x] Право `search_tags:read` для системных ролей
+- [x] Redis-кэш (`@cached_read`) для ClickHouse-запросов
+- [x] Admin: `GET /admin/parser/wb-search-tags`
 - [ ] Генерация TypeScript типов для extension
 - [ ] API client в extension-chrome
 
 ### Критерий готовности
 
-Extension отображает сводку аналитики для привязанного аккаунта.
+Extension отображает список и monthly-аналитику по поисковым запросам WB.
+
+> Удалён устаревший модуль `analytics` (PG-таблицы заказов/кампаний, permissions `analytics:*`). Данные MP-sync — в этапе 5.
 
 ---
 
@@ -136,7 +140,7 @@ Extension отображает сводку аналитики для привя
 - [ ] `sync_marketplace_orders` task
 - [ ] `sync_ad_campaigns` task
 - [ ] `refresh_marketplace_tokens` task
-- [ ] `aggregate_analytics` task
+- [ ] `aggregate_analytics` task (планируется; не связан с Search Tags API)
 - [ ] Retry + DLQ
 - [ ] Cron scheduling
 - [ ] Мониторинг: queue depth, failed jobs
@@ -180,7 +184,7 @@ flowchart LR
     E0[0: Foundation] --> E1[1: Auth]
     E1 --> E2[2: Orgs + RBAC]
     E2 --> E3[3: Marketplace]
-    E3 --> E4[4: Analytics API]
+    E3 --> E4[4: Search Tags API]
     E3 --> E5[5: Jobs]
     E4 --> E6[6: Billing]
     E5 --> E6

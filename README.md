@@ -43,10 +43,11 @@ MarketHacker — платформа для управления продажам
 
 ## Статус
 
-Документация отражает текущее состояние реализации (июнь 2025):
+Документация отражает текущее состояние реализации (июнь 2026):
 
 - **WB Portal Proxy** — развёрнут на `wb-proxy.markethacker.ru`: reverse proxy, JS guard, 6 групп section permissions, блокировка профиля WB
 - **Manager Portal** — `team.markethacker.ru`: кабинеты, команда, приглашения, section grants, биллинг
 - **Биллинг** — ЮKassa (RUB) + Stripe, webhook, фоновая сверка платежей, автопродление
-- **Кэширование** — Redis response cache для read-only данных (ClickHouse, каталоги), декоратор `@cached_read`
+- **Search Tags API** — `GET /api/v1/search-tags/queries` и `/queries/monthly`: read-only данные парсера WB из ClickHouse, право `search_tags:read`
+- **Кэширование** — Redis response cache для read-only данных (ClickHouse, каталоги PG), декоратор `@cached_read`
 - **Безопасность прокси** — server-only cookies (`wbx-validation-key`, `x-supplier-id`) не попадают в браузер менеджера
