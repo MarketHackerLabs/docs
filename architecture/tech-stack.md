@@ -35,7 +35,8 @@ Python 3.11+
 - Хранение refresh token families / blacklist.
 - Rate limiting (sliding window).
 - Брокер для Celery/ARQ.
-- Кэш агрегатов аналитики.
+- **Response cache** — read-only данные (ClickHouse, каталоги PG) через `@cached_read`; общий для всех реплик API. См. [Кэширование](./caching.md).
+- Ephemeral-токены: permissions, proxy sessions, billing counters.
 
 ### Celery / ARQ
 

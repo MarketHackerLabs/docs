@@ -264,7 +264,7 @@ sequenceDiagram
 
 ### Буст лимитов (limits_boost)
 
-Активные бусты суммируются и применяются в `BillingService.get_effective_plan()` поверх лимитов текущего тарифа:
+Активные бусты суммируются и применяются в `BillingService.get_effective_plan()` поверх лимитов текущего тарифа. Результат кэшируется в Redis (user scope, TTL 60 с, инвалидация при смене подписки) — см. [Кэширование](./caching.md).
 
 - `boost_marketplace_accounts`
 - `boost_members`

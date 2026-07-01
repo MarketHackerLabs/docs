@@ -11,17 +11,19 @@ backend/
 │       ├── shared/                 # Общие утилиты, exceptions, types
 │       ├── infrastructure/         # DB, Redis, encryption, external clients
 │       │   ├── database/
-│       │   ├── cache/
+│       │   ├── cache/                # generic: redis, json_cache, @cached_read
+│       │   ├── clickhouse/
 │       │   ├── security/
-│       │   └── marketplace/        # WB/Ozon API adapters
+│       │   └── jobs/
 │       └── modules/                # Bounded contexts
 │           ├── auth/
 │           ├── users/
 │           ├── organizations/
 │           ├── marketplace_accounts/
-│           ├── permissions/
-│           ├── analytics/
-│           └── billing/
+│           ├── search_tags/
+│           ├── billing/
+│           ├── admin/
+│           └── proxy/
 ├── alembic/
 ├── tests/
 ├── docker/
@@ -38,8 +40,10 @@ modules/auth/
 ├── api/              # routers, request/response schemas
 ├── application/      # use cases (services)
 ├── domain/           # entities, value objects, domain events
-└── infrastructure/   # repositories impl
+└── infrastructure/   # repositories, cached/*, clickhouse/queries
 ```
+
+Для кэшируемых read-операций политика объявляется **рядом с источником данных** (`@cached_read` в query-файле или `infrastructure/cached/<op>.py`), а не в общем `cache.py` модуля. Подробнее: [Кэширование](./caching.md).
 
 ### Слои и зависимости
 
@@ -71,11 +75,12 @@ flowchart BT
 |--------|----------------------|
 | `auth` | Login, logout, refresh, MFA, управление сессиями |
 | `users` | Профиль пользователя, настройки |
-| `organizations` | CRUD организаций, приглашения, membership |
-| `permissions` | Роли, permissions, проверка доступа |
+| `organizations` | CRUD организаций, роли, приглашения, membership |
 | `marketplace_accounts` | Привязка WB/Ozon, хранение credentials |
-| `analytics` | Агрегаты, отчёты, read-only API для extension |
+| `search_tags` | Поисковые запросы WB (ClickHouse, read-only) |
 | `billing` | Подписки, тарифы, лимиты, промокоды, ЮKassa/Stripe |
+| `admin` | Админ-панель, управление тарифами и парсером |
+| `proxy` | WB Portal reverse proxy |
 
 ## Shared и Infrastructure
 
@@ -88,9 +93,10 @@ flowchart BT
 ### `infrastructure/`
 
 - `database/` — SQLAlchemy engine, session factory, base model
-- `cache/` — Redis client, декораторы кэширования
+- `cache/` — Redis client, JSON cache-aside, декоратор `@cached_read` (см. [Кэширование](./caching.md))
+- `clickhouse/` — read-only клиент для данных парсера
 - `security/` — JWT, encryption, password hashing
-- `marketplace/` — адаптеры API Wildberries и Ozon
+- `jobs/` — ARQ worker
 
 ## Конфигурация
 
@@ -107,6 +113,7 @@ class Settings(BaseSettings):
     jwt_access_ttl_minutes: int = 15
     jwt_refresh_ttl_days: int = 30
     encryption_key: str
+    cache_enabled: bool = True   # TTL — в @cached_read у каждой операции
 ```
 
 Секреты никогда не коммитятся — только `.env.example` с описанием переменных.
