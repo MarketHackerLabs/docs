@@ -35,7 +35,7 @@ flowchart TB
     subgraph api [API Layer]
         GW[FastAPI App]
         AUTH[Auth Module]
-        RBAC[Access Control]
+        ACL[Access Control]
     end
 
     subgraph domain [Domain Modules]
@@ -56,8 +56,8 @@ flowchart TB
     EXT -->|HTTPS + Bearer JWT| GW
     MP --> GW
     PROXY --> GW
-    GW --> AUTH --> RBAC
-    RBAC --> ORG & MP & TAGS & BILLING
+    GW --> AUTH --> ACL
+    ACL --> ORG & MP & TAGS & BILLING
     ORG & MP --> PG
     TAGS --> CH
     AUTH --> REDIS
@@ -81,7 +81,7 @@ flowchart TB
 | Язык / фреймворк | Python 3.11+ / FastAPI |
 | Архитектура | Модульный монолит, Clean / Hexagonal |
 | БД | PostgreSQL + Redis |
-| Контроль доступа | **3 уровня:** org RBAC + account binding + section permissions |
+| Контроль доступа | Owner-based org + explicit member-access гранты (без ролей) + billing-фичи |
 | Auth для extension | JWT access + refresh token rotation |
 | Multi-tenancy | Organization-centric, RLS в PostgreSQL |
 | Credentials маркетплейсов | AES-256-GCM at rest |
@@ -94,8 +94,8 @@ flowchart TB
 | [Технологический стек](./tech-stack.md) | Выбор технологий и обоснование |
 | [Структура проекта](./structure.md) | Дерево каталогов и организация модулей |
 | [Модель данных](./data-model.md) | Сущности, связи, ER-диаграмма |
-| [Контроль доступа](./access-control.md) | 3 уровня доступа, роли, permissions |
-| [Доступ к кабинетам MP](./marketplace-access-model.md) | Section permissions, proxy, extension |
+| [Контроль доступа](./access-control.md) | Владение org, member-access гранты, billing-гейты |
+| [Доступ к кабинетам MP](./marketplace-access-model.md) | Гранты на кабинеты/разделы, proxy, extension |
 | [Аутентификация](./authentication.md) | Потоки auth для extension, токены |
 | [Безопасность](./security.md) | Шифрование, изоляция, audit |
 | [Дизайн API](./api-design.md) | Версионирование, эндпоинты, ошибки |

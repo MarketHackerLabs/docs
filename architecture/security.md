@@ -99,8 +99,8 @@ class MarketplaceCredential:
 
 ### Application layer
 
-- Все запросы фильтруются по `org_id` из JWT.
-- Middleware injects `current_org_id` — подмена org через query/body невозможна.
+- `org_id` берётся из пути запроса (`/organizations/{org_id}/...`), а не из JWT — токен не содержит org-контекста (см. [Контроль доступа](./access-control.md)).
+- `require_org_path_context` проверяет членство пользователя в `org_id` из пути и только затем устанавливает `current_org_id` для RLS — подмена org через query/body невозможна.
 - Repository-методы принимают `org_id` как обязательный параметр.
 
 ### Database layer (RLS)
@@ -121,7 +121,7 @@ RLS — дополнительный слой. Даже при ошибке в a
 | Действие | Примеры |
 |----------|---------|
 | Auth | login, logout, failed login, MFA setup, token reuse |
-| Access | permission change, role assignment |
+| Access | member-access grant/revoke, org ownership change |
 | Data | credential access, marketplace account link/unlink |
 | Org | member invite/remove, org settings change |
 
@@ -171,6 +171,6 @@ ENCRYPTION_KEY
 | Injection | Pydantic validation, parameterized queries (SQLAlchemy) |
 | Broken Auth | JWT rotation, MFA, rate limiting |
 | Sensitive Data Exposure | Encryption at rest, TLS, no credentials in logs |
-| Broken Access Control | RBAC + ReBAC + RLS |
+| Broken Access Control | Owner-based ownership + explicit member-access гранты + RLS |
 | Security Misconfiguration | Security headers, minimal permissions, no debug in prod |
 | SSRF | Whitelist для исходящих запросов к MP API |

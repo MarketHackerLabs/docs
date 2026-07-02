@@ -2,17 +2,23 @@
 
 ## Принцип
 
-Пользователь не «владеет» данными напрямую. Все бизнес-данные принадлежат **Organization**. Пользователь входит в организацию через **Membership** с назначенной ролью.
+Пользователь не «владеет» бизнес-данными напрямую — данные принадлежат
+**Organization**. Но правами управляет именно пользователь: организацией
+владеет `Organization.owner_id`, а не «роль» в членстве. Пользователь входит
+в организацию через **Membership** без каких-либо ролей — это лишь факт
+принадлежности к команде; фактические права на кабинеты и разделы задаются
+отдельными грантами (`UserMarketplaceAccount`, `UserMarketplaceSectionAccess`).
+Подробности — в [Контроле доступа](./access-control.md).
 
 ## ER-диаграмма
 
 ```mermaid
 erDiagram
+    User ||--o{ Organization : owns
     User ||--o{ Membership : has
     Organization ||--o{ Membership : has
     Organization ||--o{ MarketplaceAccount : owns
-    Role ||--o{ RolePermission : has
-    Membership }o--|| Role : assigned
+    Organization ||--o{ OrganizationInvitation : issues
     MarketplaceAccount ||--o{ MarketplaceCredential : has
     User ||--o{ UserMarketplaceAccount : assigned
     MarketplaceAccount ||--o{ UserMarketplaceAccount : has
@@ -26,6 +32,7 @@ erDiagram
         string email UK
         string password_hash
         bool is_active
+        bool is_superadmin
         bool mfa_enabled
         datetime created_at
         datetime updated_at
@@ -35,7 +42,8 @@ erDiagram
         uuid id PK
         string name
         string slug UK
-        enum plan
+        uuid owner_id FK
+        bool is_active
         datetime created_at
     }
 
@@ -43,22 +51,18 @@ erDiagram
         uuid id PK
         uuid user_id FK
         uuid org_id FK
-        uuid role_id FK
         bool is_active
         datetime joined_at
     }
 
-    Role {
+    OrganizationInvitation {
         uuid id PK
-        string name UK
-        string description
-        bool is_system
-    }
-
-    RolePermission {
-        uuid id PK
-        uuid role_id FK
-        string permission
+        uuid org_id FK
+        string email
+        string token_hash UK
+        string status
+        jsonb account_grants
+        datetime expires_at
     }
 
     MarketplaceAccount {
@@ -119,25 +123,38 @@ erDiagram
 
 ### Organization
 
-Тенант — изолированная единица данных. Все marketplace accounts и аналитика привязаны к org.
+Тенант — изолированная единица данных. Все marketplace accounts и аналитика привязаны к org. Тариф организации определяется биллинг-планом её `owner_id` (см. [Биллинг](./billing.md)).
 
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `id` | UUID | Первичный ключ |
 | `name` | string | Отображаемое имя |
 | `slug` | string | URL-safe идентификатор |
-| `plan` | enum | `free`, `pro`, `enterprise` |
+| `owner_id` | UUID | FK → User. Единолично управляет org (см. [Контроль доступа](./access-control.md)) |
+| `is_active` | bool | Деактивация без удаления |
 
 ### Membership
 
-Связь user ↔ organization с ролью.
+Связь user ↔ organization. Не хранит роль и не даёт прав — только факт членства в команде; см. [Контроль доступа](./access-control.md).
 
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `user_id` | UUID | FK → User |
 | `org_id` | UUID | FK → Organization |
-| `role_id` | UUID | FK → Role |
 | `is_active` | bool | Деактивация без удаления |
+
+### OrganizationInvitation
+
+Приглашение по email с заранее заданными грантами на кабинеты (`account_grants`), которые применяются при принятии приглашения.
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `org_id` | UUID | FK → Organization |
+| `email` | string | Email приглашённого |
+| `token_hash` | string | Хэш одноразового токена |
+| `status` | string | `pending` / `accepted` / `revoked` / `expired` |
+| `account_grants` | jsonb | Список `{marketplace_account_id, sections}` |
+| `expires_at` | datetime | TTL 7 дней |
 
 ### MarketplaceAccount
 
@@ -214,10 +231,11 @@ CREATE POLICY org_isolation ON marketplace_accounts
     USING (org_id = current_setting('app.current_org_id')::uuid);
 ```
 
-`app.current_org_id` устанавливается middleware из JWT перед каждым запросом.
+`app.current_org_id` устанавливается зависимостью `require_org_path_context` из
+`org_id` в пути запроса (не из JWT — токен не содержит org-контекста, см.
+[Контроль доступа](./access-control.md)).
 
 ## Миграции
 
 - Alembic для версионирования схемы.
 - Каждая миграция — атомарная, с `upgrade` и `downgrade`.
-- Seed-данные для системных ролей и permissions — отдельная data-миграция.

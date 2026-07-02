@@ -16,27 +16,31 @@ sequenceDiagram
     participant API as Backend API
     participant AUTH as Auth Service
     participant PG as PostgreSQL
-    participant REDIS as Redis
 
     EXT->>API: POST /auth/login (email, password)
     API->>AUTH: verify credentials
     AUTH->>PG: check user + MFA
-    AUTH->>REDIS: store refresh token family
+    AUTH->>PG: store refresh token (family_id, device_id)
     AUTH-->>EXT: access_token (15m) + refresh_token (30d)
 
     Note over EXT: Токены в chrome.storage.session
 
     EXT->>API: GET /search-tags/queries (Authorization: Bearer ...)
-    API->>AUTH: validate JWT + permissions
+    API->>AUTH: validate JWT (только user_id) + billing feature check
     API-->>EXT: data
 
     Note over EXT: access_token истёк
 
     EXT->>API: POST /auth/refresh (refresh_token)
     API->>AUTH: validate + rotate
-    AUTH->>REDIS: invalidate old, store new
+    AUTH->>PG: invalidate old, store new
     AUTH-->>EXT: new access_token + new refresh_token
 ```
+
+Токен не хранит "текущую организацию" — у пользователя может быть несколько
+организаций, и доступ к каждой из них проверяется из БД по `org_id` из URL
+при каждом запросе, а не по контексту токена. Подробнее — в
+[Контроле доступа](./access-control.md).
 
 ## Токены
 
@@ -51,15 +55,19 @@ sequenceDiagram
 ```json
 {
   "sub": "user_uuid",
-  "org_id": "current_org_uuid",
-  "permissions": ["search_tags:read", "ads:write"],
+  "jti": "unique_token_id",
   "iat": 1710000000,
   "exp": 1710000900,
-  "jti": "unique_token_id"
+  "type": "access",
+  "is_superadmin": false
 }
 ```
 
-Минимальный payload — permissions резолвятся при выдаче токена и кэшируются до истечения TTL.
+Минимальный payload — только личность пользователя. Никаких `org_id`,
+`marketplace_account_id` или `permissions` в токене нет: все проверки прав на
+конкретные организации/кабинеты выполняются из БД на каждый запрос по id из
+URL (см. [Контроль доступа](./access-control.md)). `is_superadmin`
+присутствует только для платформенных суперадминов.
 
 ### Refresh token
 
@@ -88,18 +96,20 @@ sequenceDiagram
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| POST | `/api/v1/auth/register` | Регистрация + создание org |
+| POST | `/api/v1/auth/register` | Регистрация (+ опционально создание org, где регистрирующийся становится `owner_id`) |
 | POST | `/api/v1/auth/login` | Вход, выдача токенов |
 | POST | `/api/v1/auth/refresh` | Обновление access token |
 | POST | `/api/v1/auth/logout` | Отзыв refresh token |
-| POST | `/api/v1/auth/switch-org` | Смена активной организации |
 | POST | `/api/v1/auth/mfa/setup` | Настройка TOTP |
 | POST | `/api/v1/auth/mfa/verify` | Подтверждение MFA при login |
 
+Эндпоинтов "переключения" организации/кабинета намеренно нет — токен не
+завязан на конкретную организацию, а список организаций пользователь получает
+через `GET /organizations`.
+
 ## MFA (TOTP)
 
-- Обязательна для ролей `owner` и `admin` (настраивается политикой).
-- Опциональна для остальных.
+- Опциональна, настраивается пользователем самостоятельно через `/auth/mfa/setup`.
 - Реализация: стандартный TOTP (Google Authenticator, Authy).
 - Backup codes — 10 одноразовых кодов при настройке MFA.
 
@@ -108,9 +118,9 @@ sequenceDiagram
 При `POST /auth/register`:
 
 1. Создаётся `User`.
-2. Создаётся `Organization` (имя = email или заданное).
-3. Создаётся `Membership` с ролью `owner`.
-4. Выдаётся пара токенов.
+2. Если передан `org_name` — создаётся `Organization` с `owner_id = user.id`
+   (владелец, а не "роль" — см. [Контроль доступа](./access-control.md)).
+3. Выдаётся пара токенов.
 
 ## OAuth2 PKCE (будущее)
 

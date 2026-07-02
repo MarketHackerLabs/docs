@@ -266,10 +266,11 @@ sequenceDiagram
 
 Активные бусты суммируются и применяются в `BillingService.get_effective_plan()` поверх лимитов текущего тарифа. Результат кэшируется в Redis (user scope, TTL 60 с, инвалидация при смене подписки) — см. [Кэширование](./caching.md).
 
-- `boost_marketplace_accounts`
 - `boost_members`
 - `boost_organizations`
 - `boost_api_calls_per_day`
+
+Буста на количество кабинетов маркетплейсов нет: их число в org и так ограничено количеством поддерживаемых маркетплейсов (не более одного кабинета на маркетплейс), а масштабирование агентства идёт через `boost_organizations`.
 
 Срок действия задаётся полем `boost_duration_days`.
 

@@ -1,235 +1,237 @@
 # Контроль доступа
 
-## Обзор
+## Принцип
 
-MarketHacker использует **трёхуровневую** модель доступа. Подробный разбор механизма proxy и section permissions — в [Модели доступа к кабинетам MP](./marketplace-access-model.md).
+Права принадлежат **пользователю**, а не организации. В системе нет ролей и нет
+таблицы permissions — вместо этого три независимых источника прав:
+
+1. **Владение организацией** (`Organization.owner_id`) — кто может управлять
+   самой организацией, её кабинетами и командой.
+2. **Явные гранты на кабинет/раздел** (`member_access`) — что конкретно видит
+   участник, не являющийся владельцем.
+3. **Тариф пользователя/организации** (billing features) — какие функции
+   продукта вообще доступны, независимо от того, кто есть кто.
+
+Организации не «переключаются» и не хранятся в сессии — это просто список
+ресурсов, которыми владеет или в которых состоит пользователь. У одного
+пользователя может быть сколько угодно организаций, в каждой — свои кабинеты
+маркетплейсов; всё это разрешается на бэкенде по `org_id`/`account_id` из URL
+при каждом запросе, а не по «текущему контексту» в токене.
 
 ```mermaid
 flowchart TB
-    subgraph L1 [Уровень 1 — Организация]
-        MEM[Membership + Role]
-        PERM[Permissions: search_tags:read, ads:write...]
+    USER[User]
+
+    subgraph OWN [Владение]
+        OWNER["Organization.owner_id == user.id\n→ полный контроль над org"]
     end
 
-    subgraph L2 [Уровень 2 — Кабинет MP]
-        BIND[marketplace_account_id]
-        PARTNER[Иерархия org / partner]
+    subgraph MEMBER [Членство]
+        MEM["Membership\n→ пользователь виден в команде org"]
     end
 
-    subgraph L3 [Уровень 3 — Разделы кабинета]
-        SEC[section_permissions]
-        SEC --> GROWTH[growth]
-        SEC --> PROD[products]
-        SEC --> SHIP[shipments]
-        SEC --> ANAL[analytics]
-        SEC --> PROMO[promotion]
-        SEC --> FIN[finances]
+    subgraph GRANT [Явные гранты]
+        ACC["UserMarketplaceAccount\n→ доступ к конкретному кабинету MP"]
+        SEC["UserMarketplaceSectionAccess\n→ доступ к разделу кабинета (read/write)"]
     end
 
-    USER[User] --> L1 --> L2 --> L3
+    subgraph PLAN [Тариф]
+        MP_FEATURE["billing_plans.features: team_management\n→ доступен ли manager-portal организации"]
+        ST_FEATURE["billing_plans.features: search_tags\n→ доступны ли поисковые запросы WB пользователю"]
+    end
+
+    USER --> OWN
+    USER --> MEMBER
+    MEM --> GRANT
+    OWN -.->|неявно, без грантов| ACC
 ```
 
-| Уровень | Вопрос | Пример |
-|---------|--------|--------|
-| **1. Org RBAC** | Что может делать в MarketHacker? | Пригласить участника, смотреть биллинг |
-| **2. Account binding** | К какому кабинету MP привязан? | WB «ООО Звезда», Ozon «Магазин 1» |
-| **3. Section permissions** | Какие группы меню кабинета MP видит? | Только «Аналитика» и «Продвижение», без «Финансов» |
-
 ---
 
-## Уровень 1: RBAC в организации
+## Владение организацией
 
-### Роли (стартовый набор)
+`Organization.owner_id` — единственный источник истины о том, кто управляет
+организацией. Владелец:
 
-| Роль | Описание | Типичный пользователь |
-|------|----------|----------------------|
-| `owner` | Полный доступ, биллинг, удаление org | Владелец бизнеса |
-| `admin` | Управление командой, MP-аккаунтами | Руководитель |
-| `manager` | Работа с аналитикой и рекламой | Менеджер по продажам |
-| `viewer` | Только чтение | Аналитик, стажёр |
+- создаёт, переименовывает и удаляет организацию;
+- создаёт и удаляет кабинеты маркетплейсов;
+- приглашает и удаляет участников;
+- управляет доступом участников к кабинетам и разделам.
 
-### Permissions
-
-Формат: `{resource}:{action}`.
-
-| Permission | owner | admin | manager | viewer |
-|------------|:-----:|:-----:|:-------:|:------:|
-| `org:manage` | ✓ | — | — | — |
-| `org:billing` | ✓ | — | — | — |
-| `members:invite` | ✓ | ✓ | — | — |
-| `members:manage` | ✓ | ✓ | — | — |
-| `marketplace:link` | ✓ | ✓ | — | — |
-| `marketplace:unlink` | ✓ | ✓ | — | — |
-| `section_permissions:manage` | ✓ | ✓ | — | — |
-| `search_tags:read` | ✓ | ✓ | ✓ | ✓ |
-| `ads:read` | ✓ | ✓ | ✓ | ✓ |
-| `ads:write` | ✓ | ✓ | ✓ | — |
-| `credentials:view` | ✓ | ✓ | — | — |
-
-Permissions хранятся в БД (`role_permissions`), не хардкодятся в коде.
-
-> **Не путать:** `search_tags:read` — доступ к API MarketHacker (`/search-tags/*`). Ключ `analytics` в `section_permissions` — раздел меню WB Portal (`seller.wildberries.ru`), это отдельный уровень доступа.
-
----
-
-## Уровень 2: Привязка к кабинету маркетплейса
-
-Пользователь в организации может быть привязан к одному или нескольким кабинетам MP (ReBAC).
-
-```sql
-CREATE TABLE user_marketplace_accounts (
-    id                      UUID PRIMARY KEY,
-    user_id                 UUID NOT NULL REFERENCES users(id),
-    marketplace_account_id  UUID NOT NULL REFERENCES marketplace_accounts(id),
-    is_default              BOOLEAN NOT NULL DEFAULT false,
-    granted_by              UUID REFERENCES users(id),
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (user_id, marketplace_account_id)
-);
-```
-
-**Сценарии:**
-
-- Владелец (`owner`) видит все кабинеты org без явной привязки.
-- Менеджер привязан к 2 из 10 кабинетов — видит только их.
-- JWT содержит `marketplace_account_id` активного кабинета.
-
-### Иерархия партнёров / агентств
-
-Для модели «агентство управляет клиентами»:
-
-- **Parent org** — агентство; видит sub-orgs или linked accounts.
-- **Sub-org / linked account** — клиент агентства.
-- Admin агентства назначает менеджеров на конкретные кабинеты клиентов.
-
----
-
-## Уровень 3: Section permissions (разделы кабинета MP)
-
-Гранулярные права **внутри** кабинета Wildberries/Ozon. Для WB — **6 групп бокового меню** `seller.wildberries.ru` (см. `wb_menu_groups.py`).
-
-| section_key | Раздел |
-|-------------|--------|
-| `growth` | Рост продаж |
-| `products` | Товары и цены |
-| `shipments` | Поставки и заказы |
-| `analytics` | Аналитика |
-| `promotion` | Продвижение |
-| `finances` | Финансы |
-
-Каждая запись в `user_marketplace_section_access` содержит `can_read` и `can_write`. Полный список и mapping для Ozon — см. [Модель доступа к кабинетам MP](./marketplace-access-model.md).
-
-### Enforcement
-
-| Слой | Как применяется |
-|------|-----------------|
-| **WB Portal Proxy** ✅ | Server-side проверка `/ns/*` путей + JS guard (скрытие chip-меню, блокировка fetch/навигации) |
-| **Extension** | Content script скрывает UI, блокирует URL и XHR по `section_permissions` |
-| **Backend API** | Проверка при выдаче данных MarketHacker |
-
-Пустой список `section_permissions` → полный доступ к назначенному кабинету (policy по умолчанию для owner/admin).
-
----
-
-## Алгоритм проверки доступа
+Это не «роль» и не запись в таблице прав — просто сравнение
+`organization.owner_id == user.id`. Проверка централизована в
+`OrganizationAccess` (`markethacker.modules.organizations.application.access`):
 
 ```python
-async def authorize_marketplace_access(
-    user: User,
-    org_id: UUID,
-    marketplace_account_id: UUID,
-    org_permission: str | None = None,
-    section: str | None = None,
-) -> bool:
-    membership = await get_membership(user.id, org_id)
-    if not membership or not membership.is_active:
-        return False
-
-    # Уровень 1: org permission (если запрошен)
-    if org_permission and not role_has_permission(membership.role, org_permission):
-        return False
-
-    # Уровень 2: привязка к кабинету
-    if membership.role.name not in ("owner", "admin"):
-        if not await has_account_access(user.id, marketplace_account_id):
-            return False
-
-    # Уровень 3: section permission
-    if section:
-        if membership.role.name in ("owner", "admin"):
-            return True
-        sections = await get_section_permissions(user.id, marketplace_account_id)
-        if sections and section not in sections:
-            return False
-
-    return True
+class OrganizationAccess:
+    async def is_owner(self, user_id: uuid.UUID, org_id: uuid.UUID) -> bool: ...
+    async def is_member(self, user_id: uuid.UUID, org_id: uuid.UUID) -> bool: ...
+    async def assert_owner(self, user_id: uuid.UUID, org_id: uuid.UUID) -> Organization: ...
+    async def assert_member(self, user_id: uuid.UUID, org_id: uuid.UUID) -> None: ...
 ```
+
+Никакого способа передать «владение» частично (например, только биллинг или
+только команду) не предусмотрено намеренно — если нужен ограниченный доступ,
+это делается через member-access гранты (см. ниже), а не через ослабление
+владения.
+
+### Членство (Membership)
+
+`Membership` фиксирует факт, что пользователь состоит в команде организации —
+он появляется в списке участников (`GET /organizations/{id}/members`) и может
+принимать приглашения. Само по себе членство **не даёт никаких прав**: ни на
+управление организацией, ни на доступ к кабинетам. Это сознательный
+deny-by-default — фактические возможности участника задаются исключительно
+явными грантами.
 
 ---
 
-## JWT payload
+## Доступ к кабинетам маркетплейсов
+
+Участник (не владелец) получает доступ к конкретному кабинету и его разделам
+только через явные записи, которые выдаёт владелец. Подробности модели,
+таблиц (`UserMarketplaceAccount`, `UserMarketplaceSectionAccess`) и enforcement
+в WB Portal Proxy — в [Модели доступа к кабинетам MP](./marketplace-access-model.md).
+
+Важно: даже владелец организации получает доступ к своим кабинетам через те
+же самые грант-таблицы — просто гранты выдаются ему автоматически в момент
+создания кабинета (`MemberAccessService.grant_creator_access`), а не потому,
+что владение org даёт какой-то отдельный «обход» в коде проверки доступа к
+кабинетам. Единообразие модели важнее, чем экономия одной проверки.
+
+---
+
+## Тариф как гейт для функций (billing features)
+
+Некоторые возможности продукта не являются правом конкретного пользователя —
+это фича тарифа. Такие проверки живут в `web/billing_limits.py` и
+`web/manager_portal_features.py`, а не в системе прав:
+
+| Фича (значение в БД) | Что открывает | Чей тариф проверяется | Зависимость |
+|---|---|---|---|
+| `team_management` (`MANAGER_PORTAL`) | Manager-portal целиком: команда, приглашения, кабинеты MP, WB proxy | тариф **владельца организации** | `require_manager_portal` |
+| `search_tags` (`SEARCH_TAGS`) | Поисковые запросы WB (`/search-tags/*`), данные парсинга из ClickHouse | **личный** тариф пользователя, без привязки к org | `require_search_tags_feature` |
+
+```python
+async def require_manager_portal(org_id: uuid.UUID, session: AsyncSession) -> None:
+    if not await BillingService(session).org_has_feature(org_id, MANAGER_PORTAL):
+        raise PermissionDeniedError(...)
+
+async def require_search_tags_feature(session: AsyncSession, user_id: str) -> None:
+    if not await BillingService(session).user_has_feature(uuid.UUID(user_id), SEARCH_TAGS):
+        raise PermissionDeniedError(...)
+```
+
+Лимиты плана (`check_organizations_limit`, `check_members_limit`) устроены
+аналогично — это проверки квоты по тарифу, а не проверки прав. Отдельного
+лимита на количество кабинетов маркетплейсов нет: в одной org — не более
+одного кабинета на маркетплейс (бизнес-правило `MarketplaceAccountService`,
+409 при повторном подключении), поэтому реальный рычаг масштабирования —
+`max_organizations`, а не число кабинетов.
+
+> **Не путать:** `search_tags` — это фича тарифа для доступа к API
+> MarketHacker. Раздел `analytics` в `section_permissions` — это группа меню
+> кабинета WB (`seller.wildberries.ru`), совершенно другой уровень доступа
+> (см. [Модель доступа к кабинетам MP](./marketplace-access-model.md)).
+
+---
+
+## JWT — только личность пользователя
+
+Токен не хранит «текущую организацию» или «текущий кабинет» — у пользователя
+может быть несколько организаций одновременно, и переключаться между ними
+на бэкенде нечему: доступ к каждому конкретному ресурсу проверяется из БД по
+`org_id`/`account_id` из URL при каждом запросе.
 
 ```json
 {
   "sub": "user_uuid",
-  "org_id": "org_uuid",
-  "marketplace_account_id": "account_uuid",
-  "marketplace": "wildberries",
-  "permissions": ["search_tags:read", "ads:write"],
-  "section_permissions": {
-    "analytics": { "can_read": true, "can_write": false },
-    "promotion": { "can_read": true, "can_write": true }
-  }
+  "jti": "unique_token_id",
+  "iat": 1780000000,
+  "exp": 1780000900,
+  "type": "access",
+  "is_superadmin": false
 }
 ```
 
+`is_superadmin` присутствует в payload только если пользователь — платформенный
+суперадмин (проверяется в БД при выдаче токена); используется исключительно
+для доступа в admin-panel (`require_superuser`), к организациям пользователя
+отношения не имеет.
+
+Подробности выдачи/ротации токенов — в [Аутентификации](./authentication.md).
+
 ---
 
-## ReBAC — явный доступ к ресурсам
+## Алгоритм проверки для эндпоинтов организации
 
-Дополнительно к ролям — явные grants (для нестандартных случаев):
+Большинство эндпоинтов `/organizations/{org_id}/...` защищены зависимостью
+`require_org_path_context`, которая проверяет членство и включает RLS-контекст
+БД для этого запроса:
 
-```sql
-CREATE TABLE resource_access (
-    id            UUID PRIMARY KEY,
-    user_id       UUID NOT NULL REFERENCES users(id),
-    resource_type VARCHAR(50) NOT NULL,
-    resource_id   UUID NOT NULL,
-    access_level  VARCHAR(20) NOT NULL,
-    granted_by    UUID REFERENCES users(id),
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+```python
+async def require_org_path_context(
+    org_id: Annotated[uuid.UUID, Path()],
+    user_id: Annotated[str, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_db)],
+) -> uuid.UUID:
+    authz = OrganizationAccess(OrganizationRepository(session), MembershipRepository(session))
+    await authz.assert_member(uuid.UUID(user_id), org_id)
+    _org_id_ctx.set(str(org_id))
+    return org_id
 ```
 
----
-
-## Контекст организации и кабинета
-
-- JWT содержит `org_id` и `marketplace_account_id`.
-- `POST /auth/switch-org` — смена организации.
-- `POST /auth/switch-marketplace-account` — смена активного кабинета MP.
-- Middleware injects `current_org_id` и `current_marketplace_account_id`.
-- PostgreSQL RLS фильтрует по `org_id`.
+Действия, требующие владения (создание/изменение/удаление org, приглашения,
+управление грантами на кабинеты), дополнительно вызывают
+`OrganizationAccess.assert_owner` внутри соответствующего сервиса — это не
+дублирование, а разные уровни: «состоит в команде» vs «управляет».
 
 ---
 
-## API управления доступами
+## API управления доступом
 
-| Метод | Путь | Permission |
-|-------|------|------------|
-| PUT | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}` | `members:manage` |
-| DELETE | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}` | `members:manage` |
-| GET/PUT | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}/section-access` | `section_permissions:manage` |
-| POST/GET/DELETE | `/api/v1/organizations/{org_id}/invitations` | `members:invite` / `members:manage` |
-| GET | `/api/v1/invitations/preview/{token}` | — (публично) |
+| Метод | Путь | Кто может |
+|---|---|---|
+| `GET` | `/organizations` | Любой пользователь — свои org (владелец + член) |
+| `POST` | `/organizations` | Любой пользователь (лимит по тарифу) |
+| `PATCH` | `/organizations/{org_id}` | Только владелец |
+| `DELETE` | `/organizations/{org_id}` | Только владелец |
+| `GET` | `/organizations/{org_id}/members` | Член org (требует фичу `team_management`) |
+| `DELETE` | `/organizations/{org_id}/members/{user_id}` | Только владелец |
+| `GET`/`POST`/`DELETE` | `/organizations/{org_id}/invitations` | Только владелец |
+| `GET` | `/invitations/preview/{token}` | Публично (по токену приглашения) |
+| `POST`/`DELETE` | `/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}` | Только владелец |
+| `GET`/`PUT` | `/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}/sections/{key}` | Владелец (сам участник — только чтение своих) |
 
 ---
 
-## Этапы внедрения
+## Приглашения
 
-| Этап | Что реализуем | Статус |
-|------|---------------|--------|
-| MVP | Org RBAC + account binding | ✅ |
-| v1.1 | Section permissions (6 групп WB) + manager-portal UI | ✅ |
-| v1.2 | WB Portal Proxy + JS guard + profile lock | ✅ |
-| v2 | Proxy для Ozon, custom roles | Планируется |
+Приглашение (`OrganizationInvitation`) не несёт роли. Владелец при создании
+приглашения сразу указывает `account_grants` — список кабинетов и разделов,
+которые получит приглашённый после принятия. Гранты применяются атомарно в
+момент `accept_invitation`/`accept_with_register` — участник не может
+временно оказаться «в команде без единого доступа», но и не получает больше,
+чем ему явно выдали.
+
+---
+
+## Суперадмины платформы
+
+`is_superadmin` — атрибут пользователя на уровне платформы (не организации),
+используется только в admin-panel для доступа к межорганизационным
+инструментам поддержки. Проверяется зависимостью `require_superuser` и
+полностью независим от `OrganizationAccess` — суперадмин не становится
+автоматически владельцем чужих организаций, у него отдельный набор
+административных эндпоинтов.
+
+---
+
+## Связанные документы
+
+| Документ | Содержание |
+|---|---|
+| [Модель доступа к кабинетам MP](./marketplace-access-model.md) | Гранты на кабинеты/разделы, WB Portal Proxy, приглашения |
+| [Аутентификация](./authentication.md) | JWT, refresh tokens, MFA |
+| [Модель данных](./data-model.md) | ER-диаграмма, таблицы |
+| [Биллинг и оплата](./billing.md) | Тарифы, фичи, лимиты |

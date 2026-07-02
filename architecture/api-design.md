@@ -26,7 +26,8 @@
 | POST | `/api/v1/auth/login` | — | Вход |
 | POST | `/api/v1/auth/refresh` | — | Обновление токена |
 | POST | `/api/v1/auth/logout` | ✓ | Выход |
-| POST | `/api/v1/auth/switch-org` | ✓ | Смена организации |
+
+Эндпоинта смены организации нет — токен не привязан к организации, см. [Контроль доступа](./access-control.md).
 
 ### Users
 
@@ -37,36 +38,40 @@
 
 ### Organizations
 
-| Метод | Путь | Auth | Permission | Описание |
-|-------|------|:----:|------------|----------|
-| GET | `/api/v1/organizations` | ✓ | — | Список org пользователя |
-| POST | `/api/v1/organizations` | ✓ | — | Создание org |
-| GET | `/api/v1/organizations/{id}` | ✓ | member | Детали org |
-| PATCH | `/api/v1/organizations/{id}` | ✓ | `org:manage` | Обновление |
-| POST | `/api/v1/organizations/{id}/members` | ✓ | `members:invite` | Приглашение |
-| DELETE | `/api/v1/organizations/{id}/members/{user_id}` | ✓ | `members:manage` | Удаление участника |
+Прав в смысле permission-строк нет — либо пользователь владелец (`owner_id`), либо просто член. См. [Контроль доступа](./access-control.md).
+
+| Метод | Путь | Auth | Кто может | Описание |
+|-------|------|:----:|-----------|----------|
+| GET | `/api/v1/organizations` | ✓ | любой | Список org пользователя (владелец + член) |
+| POST | `/api/v1/organizations` | ✓ | любой | Создание org (лимит по тарифу) |
+| GET | `/api/v1/organizations/{id}` | ✓ | член | Детали org |
+| PATCH | `/api/v1/organizations/{id}` | ✓ | владелец | Обновление |
+| DELETE | `/api/v1/organizations/{id}` | ✓ | владелец | Удаление org |
+| GET | `/api/v1/organizations/{id}/members` | ✓ | член (фича `team_management`) | Список участников |
+| DELETE | `/api/v1/organizations/{id}/members/{user_id}` | ✓ | владелец | Удаление участника |
 
 ### Marketplace Accounts
 
-| Метод | Путь | Auth | Permission | Описание |
-|-------|------|:----:|------------|----------|
-| GET | `/api/v1/organizations/{org_id}/marketplace-accounts` | ✓ | member | Список кабинетов |
-| POST | `/api/v1/organizations/{org_id}/marketplace-accounts` | ✓ | `marketplace_accounts:write` | Создание (`marketplace`, `display_name`) |
-| PATCH | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | `marketplace_accounts:write` | Обновление `display_name` |
-| DELETE | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | `marketplace_accounts:write` | Деактивация кабинета |
-| POST | `.../capture-init` | ✓ | `marketplace_accounts:write` | Guided Connect: `capture_token`, `connect_url`, `snippet` |
-| POST | `.../verify` | ✓ | `marketplace_accounts:read` | Проверка credentials |
-| GET | `.../credentials-status` | ✓ | `marketplace_accounts:read` | `has_portal_session`, `portal_session_saved_at` |
-| POST/DELETE | `.../access/{user_id}` | ✓ | `members:manage` | Назначение/отзыв менеджера на кабинет |
-| GET/PUT | `.../section-access` | ✓ | `section_permissions:manage` | Права на разделы WB |
+| Метод | Путь | Auth | Кто может | Описание |
+|-------|------|:----:|-----------|----------|
+| GET | `/api/v1/organizations/{org_id}/marketplace-accounts` | ✓ | член | Список кабинетов |
+| GET | `.../marketplace-accounts/mine` | ✓ | член | Кабинеты, к которым привязан текущий пользователь |
+| POST | `/api/v1/organizations/{org_id}/marketplace-accounts` | ✓ | владелец | Создание (`marketplace`, `display_name`) |
+| PATCH | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | владелец | Обновление `display_name` |
+| DELETE | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | владелец | Деактивация кабинета |
+| POST | `.../capture-init` | ✓ | владелец | Guided Connect: `capture_token`, `connect_url`, `snippet` |
+| POST | `.../verify` | ✓ | владелец | Проверка credentials |
+| GET | `.../credentials-status` | ✓ | владелец | `has_portal_session`, `portal_session_saved_at` |
+| GET/POST/DELETE | `.../access/{user_id}` | ✓ | владелец | Список/выдача/отзыв доступа к кабинету |
+| GET/PUT | `.../access/{user_id}/sections/{key}` | ✓ | владелец (себя может смотреть сам участник) | Права на разделы WB |
 
 ### Invitations
 
-| Метод | Путь | Auth | Permission | Описание |
-|-------|------|:----:|------------|----------|
-| GET | `/api/v1/organizations/{org_id}/invitations` | ✓ | `members:manage` | Ожидающие приглашения |
-| POST | `/api/v1/organizations/{org_id}/invitations` | ✓ | `members:invite` | Приглашение с role + account grants |
-| DELETE | `/api/v1/organizations/{org_id}/invitations/{id}` | ✓ | `members:manage` | Отзыв приглашения |
+| Метод | Путь | Auth | Кто может | Описание |
+|-------|------|:----:|-----------|----------|
+| GET | `/api/v1/organizations/{org_id}/invitations` | ✓ | владелец | Ожидающие приглашения |
+| POST | `/api/v1/organizations/{org_id}/invitations` | ✓ | владелец | Приглашение с `account_grants` (кабинеты + разделы) |
+| DELETE | `/api/v1/organizations/{org_id}/invitations/{id}` | ✓ | владелец | Отзыв приглашения |
 | GET | `/api/v1/invitations/preview/{token}` | — | — | Превью приглашения (публично) |
 | POST | `/api/v1/invitations/accept` | — | — | Принятие приглашения (существующий user) |
 | POST | `/api/v1/invitations/accept-register` | — | — | Регистрация + принятие приглашения |
@@ -102,12 +107,12 @@
 
 ### Search Tags (WB)
 
-Данные парсера из ClickHouse. **Платформенные** — без привязки к org или кабинету MP. Требуют право `search_tags:read` (все системные роли). На тарифах `pro` / `enterprise` включена фича `search_tags` в `billing_plans.features`.
+Данные парсера из ClickHouse. **Платформенные** — без привязки к org или кабинету MP. Доступ определяется **личным тарифом пользователя**, а не ролью: требуется фича `search_tags` в `billing_plans.features` (включена на тарифах `pro` / `enterprise`). См. [Контроль доступа](./access-control.md).
 
-| Метод | Путь | Auth | Permission | Описание |
+| Метод | Путь | Auth | Требование | Описание |
 |-------|------|:----:|------------|----------|
-| GET | `/api/v1/search-tags/queries` | ✓ | `search_tags:read` | Постраничный список запросов с частотой |
-| GET | `/api/v1/search-tags/queries/monthly` | ✓ | `search_tags:read` | Monthly-аналитика по точному query |
+| GET | `/api/v1/search-tags/queries` | ✓ | фича `search_tags` | Постраничный список запросов с частотой |
+| GET | `/api/v1/search-tags/queries/monthly` | ✓ | фича `search_tags` | Monthly-аналитика по точному query |
 
 **Query-параметры списка:** `interval`, `since`, `until`, `query` (подстрока), `page`, `limit`.
 
