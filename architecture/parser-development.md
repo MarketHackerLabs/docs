@@ -30,13 +30,13 @@ flowchart LR
 
 ### Соглашения по именованию
 
-| Артефакт | Пример |
-|----------|--------|
-| Тип задачи (`job_type`) | `wb_search_tags` |
-| Kafka topic | `markethacker.wb.search_tags` |
-| ClickHouse таблица | `wb_search_tags` |
-| Kafka Engine таблица | `wb_search_tags_kafka` |
-| Materialized view | `wb_search_tags_kafka_mv` |
+| Артефакт | search tags | market niche |
+|----------|-------------|--------------|
+| Тип задачи (`job_type`) | `wb_search_tags` | `wb_market_niche` |
+| Kafka topic | `markethacker.wb.search_tags` | `markethacker.wb.market_niche` |
+| ClickHouse таблица | `wb_search_tags` | `wb_market_niche` |
+| Kafka Engine таблица | `wb_search_tags_kafka` | `wb_market_niche_kafka` |
+| Materialized view | `wb_search_tags_kafka_mv` | `wb_market_niche_kafka_mv` |
 
 Топик и прочие параметры парсера — **в constants**, не в `.env`.
 
@@ -82,8 +82,8 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml ps kafka clickh
 ### 3. Применить миграции
 
 ```bash
-make migrate       # Alembic (PG) + ClickHouse (включая 003_wb_search_tags_kafka.sql)
-make ch-status     # убедиться, что 003 применена
+make migrate       # Alembic (PG) + ClickHouse (все неприменённые миграции)
+make ch-status     # убедиться, что миграции Kafka Engine применены
 ```
 
 ### 4. Запустить приложение
@@ -116,6 +116,15 @@ docker exec markethacker-parser-kafka \
 # Данные в ClickHouse (после ingestion, может быть задержка 1–30 с)
 curl -s "http://127.0.0.1:8124/?user=default&password=$CLICKHOUSE_PASSWORD" \
   --data "SELECT count() FROM markethacker_parser.wb_search_tags"
+
+# Анализ ниш — аналогично
+curl -X POST http://localhost:8010/api/v1/jobs/wb-market-niche \
+  -H "X-Parser-Api-Key: $PARSER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"interval": "week"}'
+
+curl -s "http://127.0.0.1:8124/?user=default&password=$CLICKHOUSE_PASSWORD" \
+  --data "SELECT count() FROM markethacker_parser.wb_market_niche"
 ```
 
 ---
@@ -146,7 +155,7 @@ make infra-up-prod    # поднимает postgres, pgbouncer, redis, clickhous
 ```bash
 make prod-deploy DEPLOY_HOST=your.server
 # или вручную:
-make prod-migrate     # PG + ClickHouse (003_wb_search_tags_kafka.sql)
+make prod-migrate     # PG + ClickHouse (все новые миграции)
 make prod-up          # пересборка и перезапуск api + worker
 ```
 
@@ -181,7 +190,11 @@ Parser infra теперь включает Kafka; backend ходит в ClickHou
 
 ## Как добавить новый парсер
 
-Эталон — **WB search tags** (`wb_search_tags`).
+Эталоны в репозитории:
+
+- **WB search tags** (`wb_search_tags`) — отчёт content-analytics, интервалы yesterday/week/month/quarter
+- **WB market niche** (`wb_market_niche`) — тот же file manager API, интервалы week/month/quarter, резолв category/subject через `wb_subjects_dict`
+- **WB subjects** (`wb_subjects`) — REST API справочника, без интервалов
 
 ### Шаг 1. Domain
 
@@ -239,13 +252,17 @@ async def publish_rows(...) -> int:
 - вызов `Service().run(payload)`;
 - обработка ошибок, DLQ, метрики.
 
-Зарегистрировать в `infrastructure/jobs/worker.py` → `WorkerSettings.functions`.
+Зарегистрировать в:
+
+- `infrastructure/jobs/worker.py` → `WorkerSettings.functions`
+- `infrastructure/jobs/dispatcher.py` → `handler_by_type` (иначе API вернёт `No ARQ handler for job type`)
 
 ### Шаг 5. Реестр типов задач
 
 `infrastructure/jobs/registry.py`:
 
 - `JobTypeDefinition` (label, поля формы для admin-panel);
+- `_INTERVAL_FIELD_CONFIGS` — если есть select «период» с опцией `all`;
 - `normalize_job_payload()`;
 - `job_timeout_seconds()` при необходимости.
 
@@ -300,7 +317,7 @@ SELECT * FROM my_report_kafka;
 - [ ] `infrastructure/.../parser.py` — извлечение данных
 - [ ] `application/parsers/.../service.py` — use case
 - [ ] `application/parsers/.../kafka.py` — публикация в Kafka
-- [ ] `infrastructure/jobs/<name>_jobs.py` + регистрация в worker
+- [ ] `infrastructure/jobs/<name>_jobs.py` + регистрация в worker **и dispatcher**
 - [ ] `infrastructure/jobs/registry.py` — описание для UI
 - [ ] `clickhouse/migrations/` — таблица + Kafka Engine + MV
 - [ ] Unit-тесты
@@ -314,9 +331,10 @@ SELECT * FROM my_report_kafka;
 |---------|---------|---------|
 | `Kafka producer is not initialized` | Worker не перезапущен или `KAFKA_ENABLED=false` | `make worker`, проверить `.env` |
 | `Connection refused` к Kafka | Infra не поднята или неверный bootstrap | Локально: `localhost:9094`, Docker: `kafka:9092` |
-| Job успешен, CH пуст | Миграция 003 не применена или MV не создан | `make ch-status`, `make migrate-ch` |
+| Job успешен, CH пуст | Миграция Kafka Engine не применена или MV не создан | `make ch-status`, `make migrate-ch` |
+| `No ARQ handler for job type` | Handler не добавлен в `dispatcher.py` | Добавить в `handler_by_type`, перезапустить API |
 | Broken messages в CH | JSON не совпадает со схемой Kafka-таблицы | Сверить поля serializer и DDL |
-| `rows_parsed > 0`, job failed | Ошибка publish в Kafka | Логи worker: `search_tags.kafka_published` / `KafkaError` |
+| `rows_parsed > 0`, job failed | Ошибка publish в Kafka | Логи worker: `*.kafka_published` / `KafkaError` |
 
 ---
 

@@ -125,7 +125,11 @@
 | Метод | Путь | Auth | Описание |
 |-------|------|:----:|----------|
 | GET | `/api/v1/admin/parser/wb-search-tags` | superuser | Список строк из ClickHouse с фильтрами org/account/auth_profile |
-| POST | `/api/v1/admin/parser/jobs/wb-search-tags` | superuser | Запуск job парсера (deprecated, использовать `/admin/parser/jobs`) |
+| POST | `/api/v1/admin/parser/jobs` | superuser | Постановка задачи парсера (`job_type`: `wb_search_tags`, `wb_market_niche`, `wb_subjects`, …) |
+| POST | `/api/v1/admin/parser/jobs/wb-search-tags` | superuser | Deprecated — использовать `/admin/parser/jobs` |
+
+Типы задач и поля формы: `GET /api/v1/admin/parser/job-types` (прокси к parser-сервису).  
+Parser-сервис напрямую: `POST /api/v1/jobs/wb-market-niche`, `POST /api/v1/jobs/wb-search-tags`.
 
 ### Health
 
