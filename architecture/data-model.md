@@ -123,7 +123,7 @@ erDiagram
 
 ### Organization
 
-Тенант — изолированная единица данных. Все marketplace accounts и аналитика привязаны к org. Тариф организации определяется биллинг-планом её `owner_id` (см. [Биллинг](./billing.md)).
+Тенант — изолированная единица данных. Все marketplace accounts и аналитика привязаны к org. Тариф организации определяется биллинг-планом её `owner_id`; лимиты org (участники, API) могут быть увеличены докупками владельца (см. [Биллинг](./billing.md)).
 
 | Поле | Тип | Описание |
 |------|-----|----------|
@@ -203,6 +203,21 @@ erDiagram
 | `nonce` | bytes | Nonce для GCM |
 | `key_version` | int | Версия ключа шифрования |
 | `expires_at` | datetime | Срок действия (если применимо) |
+
+### Биллинг (кратко)
+
+Подробности — в [Биллинг и оплата](./billing.md). Основные таблицы PostgreSQL:
+
+| Таблица | Назначение |
+|---------|------------|
+| `billing_plans` | Каталог тарифов |
+| `billing_subscriptions` | Подписка пользователя (1:1 с `users`) |
+| `billing_payments` | Платежи ЮKassa / Stripe |
+| `billing_limit_addon_products` | Каталог продуктов докупки лимитов |
+| `billing_limit_addon_entitlements` | Активные докупки пользователя |
+| `promo_codes` / `promo_code_redemptions` | Промокоды и их использование |
+
+Миграции: `20260704_0019_limit_addons`, `20260704_0020_limit_addon_billing_modes`.
 
 ## Индексы
 

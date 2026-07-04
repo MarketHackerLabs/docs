@@ -22,6 +22,8 @@
 | `BillingUsageRecord` | `billing_usage_records` | Дневной учёт использования |
 | `PromoCode` | `promo_codes` | Каталог промокодов |
 | `PromoCodeRedemption` | `promo_code_redemptions` | Факт применения промокода пользователем |
+| `BillingLimitAddonProduct` | `billing_limit_addon_products` | Каталог продуктов докупки лимитов |
+| `BillingLimitAddonEntitlement` | `billing_limit_addon_entitlements` | Активная докупка пользователя |
 
 ## Поток оформления подписки (ЮKassa)
 
@@ -97,6 +99,10 @@ arq markethacker.infrastructure.jobs.WorkerSettings
 | POST | `/billing/payments/{payment_id}/verify` | ✓ | **Ручная сверка платежа** |
 | POST | `/billing/promo/validate` | ✓ | Проверка промокода (без списания) |
 | POST | `/billing/promo/redeem` | ✓ | Активация промокода (trial / free_period / limits_boost) |
+| GET | `/billing/limit-addons/catalog` | ✓ | Каталог доступных докупок + режим оплаты |
+| GET | `/billing/limit-addons` | ✓ | Активные докупки пользователя |
+| POST | `/billing/limit-addons/purchase` | ✓ | Checkout докупки → URL ЮKassa |
+| POST | `/billing/limit-addons/{id}/cancel` | ✓ | Отмена автопродления докупки |
 
 `paymentId` — ID платежа ЮKassa из ответа `subscription/upgrade` (`CheckoutResponse.paymentId`).
 
@@ -216,7 +222,155 @@ Webhook проверяет IP отправителя (диапазоны ЮKassa
 | POST | `/admin/billing/yookassa/test-payment` | Тестовый платёж 1 ₽ из админ-панели |
 | GET/POST/PATCH | `/admin/billing/promo-codes` | CRUD промокодов |
 | GET | `/admin/billing/promo-codes/{id}/redemptions` | История использований промокода |
-| GET/PATCH | `/admin/platform-settings` | Настройки ЮKassa (shop_id, рекуррент, VAT и т.д.) |
+| GET/PATCH | `/admin/platform-settings` | Настройки ЮKassa, режим докупки лимитов и др. |
+| GET | `/admin/billing/limit-types` | Реестр типов лимитов |
+| GET/POST/PATCH | `/admin/billing/limit-addon-products` | CRUD продуктов докупки |
+
+## Докупка лимитов
+
+Расширяемая система докупки лимитов поверх тарифа. Реестр типов — `domain/limit_catalog.py`; продукты настраиваются в админке (**Биллинг → Докупка лимитов**).
+
+### Типы лимитов
+
+| `limit_key` | Поле тарифа | Область | Описание |
+|-------------|-------------|---------|----------|
+| `organizations` | `max_organizations` | user | Дополнительные организации владельца |
+| `members` | `max_members` | org | Участники команды (лимит org определяется подпиской владельца) |
+| `api_calls_per_day` | `max_api_calls_per_day` | user | Дневной лимит API-запросов |
+
+Seed-продукты (миграция `20260704_0019`):
+
+| `code` | Лимит | Единиц в пакете | Цена/мес |
+|--------|-------|-----------------|----------|
+| `extra_org_1` | organizations | 1 | 990 ₽ |
+| `extra_member_5` | members | 5 | 490 ₽ (только pro/enterprise) |
+| `extra_api_10k` | api_calls_per_day | 10 000 | 290 ₽ |
+
+### Применение лимитов
+
+Активные докупки и промо-бусты объединяются в `limit_adjustments.py` и применяются в `BillingService.get_effective_plan()`:
+
+```
+effective_limit = plan_limit + promo_boosts + purchased_addons
+```
+
+Результат кэшируется в Redis (TTL 60 с, инвалидация при смене подписки или докупки).
+
+`GET /billing/usage` возвращает расширенные метрики:
+
+| Поле | Описание |
+|------|----------|
+| `limit` | Эффективный лимит (тариф + бусты + докупки) |
+| `baseLimit` | Лимит только по тарифу и промо-бустам (без докупок) |
+| `purchasedExtra` | Сумма единиц от активных докупок по ключу |
+| `grandfathered` | `true`, если `current > limit` — ресурсы сохранены, но новые заблокированы |
+| `purchasedAddons` | Сводка докупок по `limit_key` |
+| `limitAddonBillingMode` | Текущий режим оплаты платформы |
+
+### Режимы оплаты
+
+Настраиваются в админке (**Биллинг → Докупка лимитов → Режим оплаты**) или через `PATCH /admin/platform-settings`:
+
+| Ключ | По умолчанию | Описание |
+|------|--------------|----------|
+| `limit_addon_billing_mode` | `bundled` | Режим оплаты докупок |
+| `limit_addon_separate_grace_days` | `7` | Льготный период (0–90) при неоплате в режиме `separate` |
+
+| Режим | Поведение |
+|-------|-----------|
+| `one_time` | Разовая оплата докупки; entitlements **бессрочные** (`is_perpetual=true`); автопродление тарифа — только стоимость плана |
+| `bundled` (default) | Стоимость активных докупок добавляется к сумме автопродления подписки; период entitlements синхронизируется с подпиской |
+| `separate` | Отдельные платежи за докупки (`limit_addon_renewal`); при неоплате — льготный период, затем снижение лимита до базового |
+
+Режим **фиксируется на entitlement** в поле `purchase_billing_mode` на момент покупки.
+
+### Grandfathering (режим `separate`)
+
+При истечении льготного периода лимит падает до базового тарифа. Если org или участников уже больше нового лимита:
+
+- существующие ресурсы **не удаляются**;
+- `grandfathered: true` в отчёте usage;
+- создание новых org/участников блокируется проверками `current >= limit` в `BillingService`.
+
+### Поток покупки докупки
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API
+    participant YK as ЮKassa
+
+    Client->>API: GET /billing/limit-addons/catalog
+    API-->>Client: products, billingMode
+
+    Client->>API: POST /billing/limit-addons/purchase
+    API->>YK: create_payment (limit_addon_initial)
+    API-->>Client: checkoutUrl, paymentId
+
+    Client->>YK: оплата
+    YK-->>API: webhook / ARQ sync
+    API->>API: activate entitlement
+    API->>API: invalidate effective_plan cache
+```
+
+#### POST /billing/limit-addons/purchase
+
+```json
+{
+  "productId": "uuid",
+  "quantityPacks": 1,
+  "billingPeriod": "monthly",
+  "successUrl": "https://team.markethacker.ru/billing?addon=success"
+}
+```
+
+Ответ — `CheckoutResponse` (`checkoutUrl`, `paymentId`).
+
+#### POST /billing/limit-addons/{id}/cancel
+
+Отключает автопродление докупки (`autopay_enabled=false`). Недоступно для разовых (`one_time`) докупок.
+
+### Типы платежей ЮKassa
+
+| `payment_type` | Описание |
+|----------------|----------|
+| `limit_addon_initial` | Первая оплата докупки |
+| `limit_addon_renewal` | Автопродление докупки (только `separate`) |
+
+При verify/sync для докупок в ответе `PaymentStatusResponse` может быть `addonActivated: true`.
+
+### Автопродление докупок
+
+Cron `process_yookassa_renewals` (02:00 UTC):
+
+1. **Перед продлениями** — `expire_stale_entitlements()`: истекают entitlements с прошедшим `grace_period_end`.
+2. **Подписки** — списание с сохранённой карты; в режиме `bundled` к сумме добавляется `calculate_recurring_addon_total()`.
+3. **Докупки (только `separate`)** — `_process_limit_addon_renewals()`: отдельное списание по каждому entitlement; при неудаче — `handle_separate_renewal_failure()` → льготный период.
+
+Требуется `yookassa_recurrent_enabled` и сохранённая карта.
+
+### Расширение системы
+
+Чтобы добавить новый лимит:
+
+1. Поле в `BillingPlan` + миграция Alembic.
+2. Запись в `LIMIT_CATALOG` (`domain/limit_catalog.py`).
+3. Продукт в админке или seed-миграция.
+4. При необходимости — `check_*` в `BillingService`.
+
+### Админка и UI
+
+| Интерфейс | Путь | Описание |
+|-----------|------|----------|
+| Admin Panel | `/billing/limit-addons` | CRUD продуктов, переключение режима оплаты |
+| Manager Portal | `/billing` | Каталог докупок, покупка, список активных entitlements |
+
+### Тесты
+
+| Файл | Покрытие |
+|------|----------|
+| `tests/integration/test_limit_addons.py` | API, checkout, effective plan, usage |
+| `tests/unit/test_limit_addon_billing_modes.py` | Режимы, perpetual, grace period |
 
 ## Промокоды
 
@@ -288,7 +442,9 @@ sequenceDiagram
 
 1. При первой оплате карта сохраняется (`save_payment_method`).
 2. За `yookassa_autopay_days_before` дней до окончания периода cron-задача списывает оплату с сохранённой карты.
-3. При неудаче подписка переводится в `past_due`.
+3. В режиме `bundled` к сумме подписки добавляется стоимость активных докупок; период bundled-entitlements продлевается вместе с подпиской.
+4. В режиме `separate` докупки продлеваются отдельными платежами в том же cron; при неудаче — льготный период (см. [Докупка лимитов](#докупка-лимитов)).
+5. При неудаче оплаты подписки подписка переводится в `past_due`.
 
 ## Переменные окружения
 
@@ -315,7 +471,7 @@ sequenceDiagram
 | `YOOKASSA_PAYMENT_SYNC_MIN_AGE_SECONDS` | 120 | Минимальный возраст платежа для cron-сверки |
 | `YOOKASSA_PAYMENT_SYNC_MAX_AGE_HOURS` | 24 | Не проверять платежи старше |
 
-Операционные настройки (shop_id, VAT, режим тестового магазина) редактируются в админ-панели → **Настройки → Оплата (ЮKassa)** без перезапуска API.
+Операционные настройки (shop_id, VAT, режим тестового магазина, **режим докупки лимитов**) редактируются в админ-панели → **Настройки → Оплата (ЮKassa)** или **Биллинг → Докупка лимитов** без перезапуска API. Значения попадают в runtime-кэш (`platform_settings.application.cache`).
 
 ## Структура модуля
 
@@ -323,16 +479,21 @@ sequenceDiagram
 modules/billing/
 ├── api/                    # router, schemas
 ├── application/
-│   ├── service.py          # BillingService (фасад)
+│   ├── service.py          # BillingService (фасад, usage, effective plan)
 │   ├── promo_service.py    # Валидация, redeem, скидки
-│   ├── limit_boosts.py     # Применение бустов к лимитам
+│   ├── limit_addon_service.py  # Каталог, checkout, entitlements
+│   ├── limit_adjustments.py    # Промо-бусты + докупки → effective limits
+│   ├── limit_boosts.py     # Обратная совместимость (re-export)
 │   └── yookassa_service.py # Checkout, webhook, sync, renewals
 ├── domain/
-│   ├── models.py           # BillingPlan, Subscription, Payment, PromoCode, ...
+│   ├── models.py           # Plan, Subscription, Payment, PromoCode, LimitAddon*, ...
+│   ├── limit_catalog.py    # Реестр типов лимитов
+│   ├── limit_addon_billing.py  # Режимы оплаты докупок
 │   └── promo.py            # Константы, расчёт скидки
 ├── infrastructure/
 │   ├── repository.py
 │   ├── promo_repository.py
+│   ├── limit_addon_repository.py
 │   ├── yookassa_client.py  # Async HTTP-клиент API v3
 │   ├── yookassa_credentials.py
 │   └── yookassa_webhook.py # IP validation
@@ -349,14 +510,23 @@ modules/billing/
 
 ## Интеграция во фронтенде
 
-**Manager Portal** — после редиректа на `successUrl`:
+**Manager Portal** — страница `/billing`:
+
+- текущая подписка и usage (включая `baseLimit`, `grandfathered`, `purchasedExtra`);
+- блок докупки лимитов: каталог, покупка, активные entitlements, отмена автопродления.
+
+После редиректа с оплаты подписки или докупки:
 
 ```typescript
 const paymentId = searchParams.get("paymentId"); // передать из checkout flow
 if (paymentId) {
   await api.post(`/billing/payments/${paymentId}/verify`);
-  // обновить состояние подписки
+  // обновить состояние подписки / докупки
 }
 ```
 
-**Admin Panel** — тестовый платёж: **Настройки → Оплата (ЮKassa) → Проверить интеграцию**. Промокоды: **Биллинг → Промокоды**.
+**Admin Panel**:
+
+- тестовый платёж: **Настройки → Оплата (ЮKassa) → Проверить интеграцию**;
+- промокоды: **Биллинг → Промокоды**;
+- докупка лимитов: **Биллинг → Докупка лимитов** (продукты + режим оплаты).

@@ -31,7 +31,7 @@ flowchart LR
 | `reencrypt_credentials` | по событию | Ротация ключей шифрования |
 | `sync_yookassa_payment` | defer (3 мин) | Сверка одного платежа ЮKassa после checkout |
 | `process_pending_yookassa_payments` | каждые 5 мин | Сверка всех незавершённых платежей ЮKassa |
-| `process_yookassa_renewals` | ежедневно 02:00 UTC | Автопродление подписок ЮKassa |
+| `process_yookassa_renewals` | ежедневно 02:00 UTC | Автопродление подписок ЮKassa; в режиме `bundled` — доплата докупок; в `separate` — отдельные продления entitlements |
 
 > Биллинг: [Биллинг и оплата](./billing.md)
 
