@@ -88,7 +88,7 @@ Extension выполняет login и получает рабочий access tok
 
 - [x] Модели: `MarketplaceAccount`, `MarketplaceCredential`
 - [x] AES-256-GCM encryption service
-- [x] `POST /marketplace-accounts` — создание (`marketplace`, `display_name`; один кабинет на MP в org)
+- [x] `POST /marketplace-accounts` — создание (`marketplace`, `displayName`; один кабинет на MP в org)
 - [x] `GET /marketplace-accounts` — список (без credentials)
 - [x] `DELETE /marketplace-accounts/{id}` — деактивация + отзыв proxy-сессий
 - [x] WB Portal Proxy — захват portal_session, reverse proxy, section guard

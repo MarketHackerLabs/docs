@@ -127,17 +127,19 @@ RLS — дополнительный слой. Даже при ошибке в a
 
 ```json
 {
-  "user_id": "uuid",
-  "org_id": "uuid",
+  "userId": "uuid",
+  "orgId": "uuid",
   "action": "marketplace_account.linked",
-  "resource_type": "marketplace_account",
-  "resource_id": "uuid",
+  "resourceType": "marketplace_account",
+  "resourceId": "uuid",
   "metadata": { "marketplace": "wildberries" },
   "ip": "1.2.3.4",
-  "user_agent": "...",
-  "created_at": "2026-06-05T10:00:00Z"
+  "userAgent": "...",
+  "createdAt": "2026-06-05T10:00:00Z"
 }
 ```
+
+> Формат соответствует JSON-ответам admin API. В PostgreSQL колонки остаются в snake_case (`user_id`, `created_at`, …).
 
 Audit log — append-only, без UPDATE/DELETE.
 

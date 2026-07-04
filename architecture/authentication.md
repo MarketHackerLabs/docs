@@ -21,7 +21,7 @@ sequenceDiagram
     API->>AUTH: verify credentials
     AUTH->>PG: check user + MFA
     AUTH->>PG: store refresh token (family_id, device_id)
-    AUTH-->>EXT: access_token (15m) + refresh_token (30d)
+    AUTH-->>EXT: accessToken (15m) + refreshToken (30d)
 
     Note over EXT: Токены в chrome.storage.session
 
@@ -29,12 +29,12 @@ sequenceDiagram
     API->>AUTH: validate JWT (только user_id) + billing feature check
     API-->>EXT: data
 
-    Note over EXT: access_token истёк
+    Note over EXT: accessToken истёк
 
-    EXT->>API: POST /auth/refresh (refresh_token)
+    EXT->>API: POST /auth/refresh (refreshToken)
     API->>AUTH: validate + rotate
     AUTH->>PG: invalidate old, store new
-    AUTH-->>EXT: new access_token + new refresh_token
+    AUTH-->>EXT: new accessToken + refreshToken
 ```
 
 Токен не хранит "текущую организацию" — у пользователя может быть несколько
@@ -51,6 +51,8 @@ sequenceDiagram
 | Device fingerprint | — | Extension install ID |
 
 ### JWT payload (access token)
+
+> JWT — отдельный контракт, не REST JSON. Стандартные claims (`sub`, `iat`, `exp`, `jti`) и кастомные поля (`is_superadmin`) остаются в snake_case.
 
 ```json
 {
@@ -118,7 +120,7 @@ URL (см. [Контроль доступа](./access-control.md)). `is_superadm
 При `POST /auth/register`:
 
 1. Создаётся `User`.
-2. Если передан `org_name` — создаётся `Organization` с `owner_id = user.id`
+2. Если передан `orgName` — создаётся `Organization` с `owner_id = user.id`
    (владелец, а не "роль" — см. [Контроль доступа](./access-control.md)).
 3. Выдаётся пара токенов.
 
@@ -137,7 +139,7 @@ sequenceDiagram
     API-->>BROWSER: redirect with authorization_code
     BROWSER-->>EXT: callback with code
     EXT->>API: POST /oauth/token (code + code_verifier)
-    API-->>EXT: access_token + refresh_token
+    API-->>EXT: accessToken + refreshToken
 ```
 
 На MVP достаточно email/password + refresh. PKCE добавляется при появлении web-клиента.

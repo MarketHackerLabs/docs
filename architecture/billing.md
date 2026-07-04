@@ -98,34 +98,34 @@ arq markethacker.infrastructure.jobs.WorkerSettings
 | POST | `/billing/promo/validate` | ✓ | Проверка промокода (без списания) |
 | POST | `/billing/promo/redeem` | ✓ | Активация промокода (trial / free_period / limits_boost) |
 
-`payment_id` — ID платежа ЮKassa из ответа `subscription/upgrade` (`CheckoutResponse.payment_id`).
+`paymentId` — ID платежа ЮKassa из ответа `subscription/upgrade` (`CheckoutResponse.paymentId`).
 
 #### POST /billing/subscription/upgrade
 
 ```json
 {
-  "plan_name": "pro",
+  "planName": "pro",
   "provider": "yookassa",
-  "billing_period": "monthly",
-  "promo_code": "SUMMER20",
-  "success_url": "https://team.markethacker.ru/billing/success",
-  "cancel_url": "https://team.markethacker.ru/billing/cancel"
+  "billingPeriod": "monthly",
+  "promoCode": "SUMMER20",
+  "successUrl": "https://team.markethacker.ru/billing/success",
+  "cancelUrl": "https://team.markethacker.ru/billing/cancel"
 }
 ```
 
 | Поле | Описание |
 |------|----------|
-| `billing_period` | `monthly` (30 дней) или `yearly` (365 дней). По умолчанию `monthly` |
-| `promo_code` | Опционально. Только для типа `discount` — скидка на **первый** платёж |
+| `billingPeriod` | `monthly` (30 дней) или `yearly` (365 дней). По умолчанию `monthly` |
+| `promoCode` | Опционально. Только для типа `discount` — скидка на **первый** платёж |
 
 Ответ:
 
 ```json
 {
   "data": {
-    "checkout_url": "https://yoomoney.ru/checkout/...",
+    "checkoutUrl": "https://yoomoney.ru/checkout/...",
     "provider": "yookassa",
-    "payment_id": "2d7f3c8a-0001-5000-8000-1a2b3c4d5e6f"
+    "paymentId": "2d7f3c8a-0001-5000-8000-1a2b3c4d5e6f"
   }
 }
 ```
@@ -137,18 +137,18 @@ arq markethacker.infrastructure.jobs.WorkerSettings
 ```json
 {
   "data": {
-    "payment_id": "2d7f3c8a-0001-5000-8000-1a2b3c4d5e6f",
+    "paymentId": "2d7f3c8a-0001-5000-8000-1a2b3c4d5e6f",
     "status": "succeeded",
-    "is_paid": true,
+    "isPaid": true,
     "processed": true,
-    "subscription_active": true,
+    "subscriptionActive": true,
     "synced": true,
     "message": "Платёж обработан"
   }
 }
 ```
 
-Рекомендуется вызывать на странице `success_url` сразу после возврата пользователя с оплаты.
+Рекомендуется вызывать на странице `successUrl` сразу после возврата пользователя с оплаты.
 
 #### POST /billing/promo/validate
 
@@ -157,8 +157,8 @@ arq markethacker.infrastructure.jobs.WorkerSettings
 ```json
 {
   "code": "SUMMER20",
-  "plan_name": "pro",
-  "billing_period": "monthly"
+  "planName": "pro",
+  "billingPeriod": "monthly"
 }
 ```
 
@@ -168,13 +168,13 @@ arq markethacker.infrastructure.jobs.WorkerSettings
 {
   "data": {
     "code": "SUMMER20",
-    "promo_type": "discount",
+    "promoType": "discount",
     "valid": true,
-    "plan_name": "pro",
-    "checkout_billing_period": "monthly",
-    "original_amount": "2990.00",
-    "discount_applied": "598.00",
-    "final_amount": "2392.00"
+    "planName": "pro",
+    "checkoutBillingPeriod": "monthly",
+    "originalAmount": "2990.00",
+    "discountApplied": "598.00",
+    "finalAmount": "2392.00"
   }
 }
 ```
@@ -186,7 +186,7 @@ arq markethacker.infrastructure.jobs.WorkerSettings
 ```json
 {
   "code": "TRIAL14",
-  "plan_name": "pro"
+  "planName": "pro"
 }
 ```
 
@@ -349,10 +349,10 @@ modules/billing/
 
 ## Интеграция во фронтенде
 
-**Manager Portal** — после редиректа на `success_url`:
+**Manager Portal** — после редиректа на `successUrl`:
 
 ```typescript
-const paymentId = searchParams.get("payment_id"); // передать из checkout flow
+const paymentId = searchParams.get("paymentId"); // передать из checkout flow
 if (paymentId) {
   await api.post(`/billing/payments/${paymentId}/verify`);
   // обновить состояние подписки

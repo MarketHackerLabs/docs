@@ -5,6 +5,7 @@
 - **REST** с предсказуемыми URL и HTTP-методами.
 - **Версионирование** через prefix: `/api/v1/`.
 - **OpenAPI 3.1** — автогенерация из FastAPI.
+- **camelCase в JSON** — все поля тел запросов и ответов (см. [Соглашение об именовании](#соглашение-об-именовании-json)).
 - **Единый формат ошибок** на всех эндпоинтах.
 - **Пагинация** через cursor-based pagination (для больших списков).
 
@@ -56,12 +57,12 @@
 |-------|------|:----:|-----------|----------|
 | GET | `/api/v1/organizations/{org_id}/marketplace-accounts` | ✓ | член | Список кабинетов |
 | GET | `.../marketplace-accounts/mine` | ✓ | член | Кабинеты, к которым привязан текущий пользователь |
-| POST | `/api/v1/organizations/{org_id}/marketplace-accounts` | ✓ | владелец | Создание (`marketplace`, `display_name`) |
-| PATCH | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | владелец | Обновление `display_name` |
+| POST | `/api/v1/organizations/{org_id}/marketplace-accounts` | ✓ | владелец | Создание (`marketplace`, `displayName`) |
+| PATCH | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | владелец | Обновление `displayName` |
 | DELETE | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | владелец | Деактивация кабинета |
-| POST | `.../capture-init` | ✓ | владелец | Guided Connect: `capture_token`, `connect_url`, `snippet` |
+| POST | `.../capture-init` | ✓ | владелец | Guided Connect: `captureToken`, `connectUrl`, `snippet` |
 | POST | `.../verify` | ✓ | владелец | Проверка credentials |
-| GET | `.../credentials-status` | ✓ | владелец | `has_portal_session`, `portal_session_saved_at` |
+| GET | `.../credentials-status` | ✓ | владелец | `hasPortalSession`, `portalSessionSavedAt` |
 | GET/POST/DELETE | `.../access/{user_id}` | ✓ | владелец | Список/выдача/отзыв доступа к кабинету |
 | GET/PUT | `.../access/{user_id}/sections/{key}` | ✓ | владелец (себя может смотреть сам участник) | Права на разделы WB |
 
@@ -70,7 +71,7 @@
 | Метод | Путь | Auth | Кто может | Описание |
 |-------|------|:----:|-----------|----------|
 | GET | `/api/v1/organizations/{org_id}/invitations` | ✓ | владелец | Ожидающие приглашения |
-| POST | `/api/v1/organizations/{org_id}/invitations` | ✓ | владелец | Приглашение с `account_grants` (кабинеты + разделы) |
+| POST | `/api/v1/organizations/{org_id}/invitations` | ✓ | владелец | Приглашение с `accountGrants` (кабинеты + разделы) |
 | DELETE | `/api/v1/organizations/{org_id}/invitations/{id}` | ✓ | владелец | Отзыв приглашения |
 | GET | `/api/v1/invitations/preview/{token}` | — | — | Превью приглашения (публично) |
 | POST | `/api/v1/invitations/accept` | — | — | Принятие приглашения (существующий user) |
@@ -80,7 +81,7 @@
 
 | Метод | Путь | Auth | Описание |
 |-------|------|:----:|----------|
-| POST | `/api/v1/proxy/web-handshake` | ✓ | Создать proxy-сессию, получить `callback_url` |
+| POST | `/api/v1/proxy/web-handshake` | ✓ | Создать proxy-сессию, получить `callbackUrl` |
 | GET | `/api/v1/proxy/portal/connect/{token}` | — | Начать Guided Connect (Set-Cookie `mh_wb_connect`) |
 | GET | `/api/v1/proxy/portal/connect/{token}/done` | — | Страница успеха, `postMessage` в opener |
 | GET | `/api/v1/proxy/portal/*` | cookie | Reverse proxy к seller.wildberries.ru |
@@ -116,7 +117,7 @@
 
 **Query-параметры списка:** `interval`, `since`, `until`, `query` (подстрока), `page`, `limit`.
 
-**Monthly-ответ:** метрики с `MetricDelta` (value, previous, diff, diff_percent) — frequency, CTR, конверсии, orders, avg_frequency, subjects_with_orders, top_order_subject. CTR = open_to_card / frequency × 100.
+**Monthly-ответ:** метрики с `MetricDelta` (`value`, `previous`, `diff`, `diffPercent`) — `frequency`, `ctr`, конверсии, `orders`, `avgFrequency`, `subjectsWithOrders`, `topOrderSubject`. CTR = `openToCard` / `frequency` × 100.
 
 Источник: таблица `wb_search_tags` (+ join `wb_subjects_dict` для названия предмета). Кэш: `@cached_read` (TTL 30 / 15 мин). См. [Кэширование](./caching.md), [Parser Service](./parser.md).
 
@@ -138,6 +139,35 @@ Parser-сервис напрямую: `POST /api/v1/jobs/wb-market-niche`, `POST
 | GET | `/health` | — | Liveness probe |
 | GET | `/ready` | — | Readiness probe (DB + Redis) |
 
+## Соглашение об именовании JSON
+
+Все **тела запросов и ответов** REST API сериализуются в **camelCase**. В Python-коде поля Pydantic-схем остаются в snake_case; преобразование выполняется автоматически через базовый `CamelModel` (`alias_generator=to_camel`, `populate_by_name=True`).
+
+| Контекст | Стиль | Пример |
+|----------|-------|--------|
+| JSON request/response | camelCase | `accessToken`, `pageSize`, `fullName` |
+| Query-параметры URL | snake_case | `page_size`, `date_from`, `sort_by` |
+| Значения enum / status | как в коде | `past_due`, `limits_boost`, `trialing` |
+| JWT payload (claims) | snake_case для кастомных | `is_superadmin` |
+| PostgreSQL / Python domain | snake_case | `display_name`, `owner_id` |
+
+**Обратная совместимость:** благодаря `populate_by_name=True` клиенты могут отправлять тела запросов и в snake_case, и в camelCase. Ответы API всегда в camelCase.
+
+**Реализация (backend):**
+
+```python
+# markethacker/shared/schemas.py
+class CamelModel(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+```
+
+FastAPI: `response_model_by_alias=True` на уровне приложения. Ошибки и ручная сериализация — через `serialize_model()` с `by_alias=True`.
+
+**Клиенты:** `admin-panel`, `manager-portal` и будущее extension используют camelCase в TypeScript-типах (`accessToken`, `createdAt`, …). Query-параметры в admin-panel конвертируются в snake_case при сборке URL (`buildQuery`).
+
 ## Формат ответов
 
 ### Успех
@@ -146,7 +176,7 @@ Parser-сервис напрямую: `POST /api/v1/jobs/wb-market-niche`, `POST
 {
   "data": { ... },
   "meta": {
-    "request_id": "uuid"
+    "requestId": "uuid"
   }
 }
 ```
@@ -161,8 +191,8 @@ Parser-сервис напрямую: `POST /api/v1/jobs/wb-market-niche`, `POST
   "meta": {
     "total": 1250,
     "page": 1,
-    "page_size": 50,
-    "has_next": true
+    "pageSize": 50,
+    "hasNext": true
   }
 }
 ```
@@ -174,7 +204,7 @@ Parser-сервис напрямую: `POST /api/v1/jobs/wb-market-niche`, `POST
   "data": [ ... ],
   "meta": {
     "cursor": "next_cursor_value",
-    "has_more": true
+    "hasMore": true
   }
 }
 ```
@@ -189,7 +219,7 @@ Parser-сервис напрямую: `POST /api/v1/jobs/wb-market-niche`, `POST
     "details": {}
   },
   "meta": {
-    "request_id": "uuid"
+    "requestId": "uuid"
   }
 }
 ```
@@ -247,9 +277,19 @@ async function apiClient<T>(path: string, options?: RequestInit): Promise<T> {
 }
 ```
 
+Пример ответа `POST /auth/login`:
+
+```json
+{
+  "accessToken": "eyJ...",
+  "refreshToken": "opaque-refresh-token",
+  "tokenType": "bearer"
+}
+```
+
 ## Request ID
 
-Каждый запрос получает `X-Request-ID` (генерируется middleware, если не передан клиентом). Возвращается в `meta.request_id` — для корреляции логов и поддержки.
+Каждый запрос получает `X-Request-ID` (генерируется middleware, если не передан клиентом). Возвращается в `meta.requestId` — для корреляции логов и поддержки.
 
 ## OpenAPI
 

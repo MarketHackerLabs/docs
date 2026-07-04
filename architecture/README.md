@@ -85,7 +85,7 @@ flowchart TB
 | Auth для extension | JWT access + refresh token rotation |
 | Multi-tenancy | Organization-centric, RLS в PostgreSQL |
 | Credentials маркетплейсов | AES-256-GCM at rest |
-| API-контракт | OpenAPI → типы для extension |
+| API-контракт | OpenAPI → типы для extension; JSON в camelCase |
 
 ## Разделы документации
 

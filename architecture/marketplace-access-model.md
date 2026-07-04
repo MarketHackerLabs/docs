@@ -114,7 +114,7 @@ CREATE TABLE user_marketplace_section_access (
 
 ```
 PUT /organizations/{org_id}/marketplace-accounts/{account_id}/access/{user_id}/sections/{section_key}
-{ "can_read": true, "can_write": false }
+{ "canRead": true, "canWrite": false }
 ```
 
 **Пустой список записей для пользователя на данном кабинете = нет доступа ни
@@ -161,19 +161,19 @@ async def resolve_member_sections(session, *, user_id, org_id, account_id) -> di
 
 ## Приглашения с грантами на кабинеты
 
-Владелец при создании приглашения сразу указывает `account_grants` — список
+Владелец при создании приглашения сразу указывает `accountGrants` — список
 кабинетов и разделов, которые будут выданы приглашённому:
 
 ```json
 POST /organizations/{org_id}/invitations
 {
   "email": "manager@example.com",
-  "account_grants": [
+  "accountGrants": [
     {
-      "marketplace_account_id": "uuid",
+      "marketplaceAccountId": "uuid",
       "sections": [
-        { "section_key": "analytics", "can_read": true, "can_write": false },
-        { "section_key": "promotion", "can_read": true, "can_write": true }
+        { "sectionKey": "analytics", "canRead": true, "canWrite": false },
+        { "sectionKey": "promotion", "canRead": true, "canWrite": true }
       ]
     }
   ]
@@ -230,7 +230,7 @@ sequenceDiagram
 | **proxy_session** | Краткоживущий Redis-токен (TTL 1ч), хранит `sections`, посчитанные один раз при handshake |
 | **JS-инжект (auth)** | Устанавливает auth-токены в localStorage/cookies до загрузки WB SPA |
 | **JS guard** | Скрывает chip-элементы меню, блокирует fetch/XHR и навигацию к запрещённым разделам |
-| **Профиль WB** | Селектор профиля заменён статическим текстом (`display_name` кабинета); модалка «Профиль» заблокирована |
+| **Профиль WB** | Селектор профиля заменён статическим текстом (`displayName` кабинета); модалка «Профиль» заблокирована |
 
 ### Двойной enforcement
 
