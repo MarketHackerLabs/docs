@@ -283,7 +283,7 @@ https://seller-auth.wildberries.ru → https://wb-proxy.markethacker.ru/__auth__
 
 - Пути **вне** `/ns/*` (статика SPA, ассеты) разрешены всем менеджерам с активным кабинетом — не содержат бизнес-данных.
 - Пути `/ns/*` резолвятся через каталог `WB_PORTAL_ROUTES` (first-match по самому длинному префиксу) в `section_key`.
-- **Неизвестный `/ns/*`-путь отклоняется по умолчанию** (403), если явно не добавлен в `WB_GATEWAY_EXTRA_ALLOWED_NS_PREFIXES` (ops-эскейп-хетч без редеплоя, пусто по умолчанию).
+- **Неизвестный `/ns/*`-путь отклоняется по умолчанию** (403), если явно не добавлен в escape-hatch: `WB_GATEWAY_EXTRA_ALLOWED_NS_PREFIXES` (env) или `extra_allowed_ns_prefixes` в админке «Инжект WB-портала» (без редеплоя).
 - Мутирующие методы (`POST`/`PUT`/`PATCH`/`DELETE`) дополнительно требуют `can_write` в разделе; часть маршрутов помечена `allow_write=False` (read-only навсегда).
 
 | section_key | Раздел | Пример путей WB |
@@ -357,6 +357,7 @@ document.cookie = "WBTokenV3=" + token + "; path=/; max-age=86400; SameSite=Lax"
 | `badge_color` | string | hex-цвет `#RRGGBB` |
 | `extra_denied_menu_chips` | list[string] | `[a-zA-Z0-9_-]{1,64}`, ≤ 50 элементов |
 | `extra_denied_path_prefixes` | list[string] | начинается с `/`, ≤ 200 символов, ≤ 50 элементов |
+| `extra_allowed_ns_prefixes` | list[string] | начинается с `/ns/`, ≤ 200 символов, ≤ 50 элементов — escape-hatch для default-deny ACL |
 
 `normalize_wb_portal_inject_config` — best-effort нормализация при чтении (никогда не бросает исключений), `validate_wb_portal_inject_config` — строгая валидация при сохранении из админ-панели (бросает `ValidationError`). API: `GET/PUT /api/v1/admin/wb-portal-inject`. Изменения применяются без перезапуска API (runtime cache платформенных настроек).
 
@@ -464,7 +465,7 @@ CORS_ORIGINS=["https://team.markethacker.ru","https://admin.markethacker.ru"]
 | WB периодически сбрасывает localStorage | `setInterval` каждые 500ms восстанавливает токены |
 | WB возвращает `401` на ABAC/validate без `wbx-validation-key` | Конвертируется в `204`, чтобы WB не инициировал logoff |
 | Селектор профиля WB (смена компании, выход) | Заменён статическим текстом; модалка заблокирована |
-| Неизвестные `/ns/*` пути | Отклоняются по умолчанию (403) — `AccessPolicy`, ops-эскейп-хетч через `WB_GATEWAY_EXTRA_ALLOWED_NS_PREFIXES` |
+| Неизвестные `/ns/*` пути | Отклоняются по умолчанию (403) — `AccessPolicy`; escape-hatch: env `WB_GATEWAY_EXTRA_ALLOWED_NS_PREFIXES` + админка `extra_allowed_ns_prefixes` |
 | Race condition при параллельной привязке/выборе supplier (несколько вкладок) | `MarketplaceCredentialVault.version` — optimistic concurrency, повтор операции при конфликте |
 | `X-Frame-Options: DENY` глобально на все ответы платформы | Не мешает: кабинет открывается через `window.open` в новой вкладке, не в iframe |
 
