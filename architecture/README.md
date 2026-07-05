@@ -29,7 +29,7 @@ flowchart TB
     subgraph client [Клиенты]
         EXT[Chrome Extension]
         MP[Manager Portal]
-        PROXY[WB Portal Proxy]
+        PROXY[WB Gateway]
     end
 
     subgraph api [API Layer]

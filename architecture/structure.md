@@ -23,7 +23,8 @@ backend/
 │           ├── search_tags/
 │           ├── billing/
 │           ├── admin/
-│           └── proxy/
+│           ├── wb_connect/
+│           └── wb_gateway/
 ├── alembic/
 ├── tests/
 ├── docker/
@@ -80,7 +81,8 @@ flowchart BT
 | `search_tags` | Поисковые запросы WB (ClickHouse, read-only) |
 | `billing` | Подписки, тарифы, лимиты, промокоды, ЮKassa/Stripe |
 | `admin` | Админ-панель, управление тарифами и парсером |
-| `proxy` | WB Portal reverse proxy |
+| `wb_connect` | Guided Connect — первичная привязка кабинета WB (onboarding subdomain-прокси) |
+| `wb_gateway` | Reverse proxy к seller.wildberries.ru для уже подключённых кабинетов |
 
 ## Shared и Infrastructure
 

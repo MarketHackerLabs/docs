@@ -86,14 +86,14 @@ Extension выполняет login и получает рабочий access tok
 
 ### Задачи
 
-- [x] Модели: `MarketplaceAccount`, `MarketplaceCredential`
+- [x] Модели: `MarketplaceAccount`, `MarketplaceCredentialVault`
 - [x] AES-256-GCM encryption service
 - [x] `POST /marketplace-accounts` — создание (`marketplace`, `displayName`; один кабинет на MP в org)
 - [x] `GET /marketplace-accounts` — список (без credentials)
-- [x] `DELETE /marketplace-accounts/{id}` — деактивация + отзыв proxy-сессий
-- [x] WB Portal Proxy — захват portal_session, reverse proxy, section guard
-- [x] Guided Connect — popup-привязка WB без DevTools, onboarding proxy
-- [x] Section permissions — 6 групп меню WB (`proxy/domain/wb_routes.py`, `marketplace_accounts/domain/sections.py`)
+- [x] `DELETE /marketplace-accounts/{id}` — деактивация (`archived`) + отзыв всех WB Gateway-сессий
+- [x] WB Gateway — reverse proxy к seller.wildberries.ru, JWT-сессия с Redis revocation, default-deny ACL (`wb_gateway/domain/access_policy.py`)
+- [x] WB Connect (Guided Connect) — popup-привязка WB без DevTools, onboarding subdomain-прокси
+- [x] Section permissions — 6 групп меню WB (`wb_gateway/domain/access_policy.py`, `marketplace_accounts/domain/wb_menu_groups.py`)
 - [x] Явные member-access гранты (`UserMarketplaceAccount`, `UserMarketplaceSectionAccess`) вместо ReBAC `resource_access`
 - [x] Приглашения с account grants и section permissions
 - [ ] Адаптеры: Wildberries API client (полная синхронизация)

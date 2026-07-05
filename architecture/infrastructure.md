@@ -135,10 +135,12 @@ Internet :443
     │
     ▼
  Caddy (host network, TLS Let's Encrypt)
-    ├── api.markethacker.ru       → 127.0.0.1:8000  (FastAPI backend)
-    ├── admin.markethacker.ru     → 127.0.0.1:3001  (Admin Panel, Next.js)
-    ├── team.markethacker.ru      → 127.0.0.1:3002  (Manager Portal, Next.js)
-    └── wb-proxy.markethacker.ru  → 127.0.0.1:8000  (WB Portal Proxy, FastAPI)
+    ├── api.markethacker.ru               → 127.0.0.1:8000  (FastAPI backend)
+    ├── admin.markethacker.ru             → 127.0.0.1:3001  (Admin Panel, Next.js)
+    ├── team.markethacker.ru              → 127.0.0.1:3002  (Manager Portal, Next.js)
+    ├── wb-proxy.markethacker.ru          → 127.0.0.1:8000  (WB Gateway, FastAPI)
+    └── wb-connect.markethacker.ru        → 127.0.0.1:8000  (WB Connect: Guided Connect,
+        + *.wb-connect.markethacker.ru                       FastAPI)
 
 Docker-сети (межсервисное):
     backend api/worker ──markethacker_apps──► markethacker-parser-api:8010, clickhouse:8123
@@ -147,7 +149,9 @@ Docker-сети (межсервисное):
 ```
 
 > `wb-proxy.markethacker.ru` указывает на тот же FastAPI backend, Caddy переписывает путь:
-> `GET /something` → `GET /api/v1/proxy/portal/something`.
+> `GET /something` → `GET /api/v1/wb-gateway/something`. `wb-connect.markethacker.ru` (и явно
+> перечисленные onboarding-поддомены) НЕ переписываются — путь передаётся как есть, backend
+> диспетчеризует по заголовку `Host`. См. [WB Gateway & Guided Connect](./wb-portal-proxy.md).
 
 ### Docker Compose стеки
 
@@ -179,7 +183,7 @@ cd caddy && make up
 
 | Компонент | Решение | Примечание |
 |-----------|---------|------------|
-| API (FastAPI) | Docker container | + WB Portal Proxy |
+| API (FastAPI) | Docker container | + WB Gateway + WB Connect |
 | Worker (ARQ) | Docker container | Фоновые задачи |
 | Admin Panel | Docker container (Next.js) | `admin.markethacker.ru` |
 | Manager Portal | Docker container (Next.js) | `team.markethacker.ru` |
@@ -232,15 +236,14 @@ JWT_REFRESH_TTL_DAYS=30
 ENCRYPTION_KEY=change-me-32-bytes-key-here!!!!
 ENVIRONMENT=production
 LOG_LEVEL=INFO
-CORS_ORIGINS=["https://team.markethacker.ru","https://wb-proxy.markethacker.ru","https://admin.markethacker.ru"]
+CORS_ORIGINS=["https://team.markethacker.ru","https://admin.markethacker.ru"]
 
-# WB Portal Proxy (production)
+# WB Gateway + WB Connect (production)
 WB_PORTAL_PUBLIC_BASE_URL=https://wb-proxy.markethacker.ru
-WB_PORTAL_COOKIE_PATH=/
-WB_PORTAL_COOKIE_SECURE=true
+WB_CONNECT_PUBLIC_BASE_URL=https://wb-connect.markethacker.ru/api/v1/wb-connect
 ```
 
-> ⚠️ `WB_PORTAL_COOKIE_PATH=/` обязателен в production. Caddy rewrite убирает `/api/v1/proxy/portal`, поэтому cookie должна устанавливаться на корневой путь.
+> ⚠️ `WB_CONNECT_PUBLIC_BASE_URL` **обязан** включать путь `/api/v1/wb-connect` — Caddy для `wb-connect.markethacker.ru` НЕ делает rewrite (в отличие от `wb-proxy`), путь передаётся как есть. Cookie-path/`Secure` для `mh_gw_session` выводятся автоматически из `WB_PORTAL_PUBLIC_BASE_URL` (dedicated subdomain → `Path=/`, `Secure=true`) — отдельные `WB_PORTAL_COOKIE_PATH`/`WB_PORTAL_COOKIE_SECURE` в production не нужны. `wb-proxy`/`wb-connect` не добавляются в `CORS_ORIGINS` — их кросс-доменные сценарии обрабатываются отдельными, более узкими проверками (см. [WB Gateway & Guided Connect](./wb-portal-proxy.md)).
 
 ### Manager Portal (`manager-portal/.env`)
 

@@ -2,14 +2,14 @@
 
 Центральный репозиторий документации проекта [MarketHacker](https://github.com/MarketHackerLabs).
 
-MarketHacker — платформа для управления продажами на маркетплейсах (Wildberries, Ozon и др.). Включает Chromium-расширение, API-сервер, панель администратора и портал менеджеров с встроенным WB Portal Proxy.
+MarketHacker — платформа для управления продажами на маркетплейсах (Wildberries, Ozon и др.). Включает Chromium-расширение, API-сервер, панель администратора и портал менеджеров с встроенным WB Gateway.
 
 ## Репозитории проекта
 
 | Репозиторий | Назначение |
 |-------------|------------|
 | [extension-chrome](https://github.com/MarketHackerLabs/extension-chrome) | Chromium-расширение (React, TypeScript, MV3) |
-| [backend](https://github.com/MarketHackerLabs/backend) | API-сервер (Python, FastAPI) + WB Portal Proxy |
+| [backend](https://github.com/MarketHackerLabs/backend) | API-сервер (Python, FastAPI) + WB Gateway + WB Connect |
 | [admin-panel](https://github.com/MarketHackerLabs/admin-panel) | Панель администратора (Next.js, `admin.markethacker.ru`) |
 | [manager-portal](https://github.com/MarketHackerLabs/manager-portal) | Портал менеджеров (Next.js, `team.markethacker.ru`) |
 | [parser](https://github.com/MarketHackerLabs/parser) | Платформа фоновых задач (Python, FastAPI, ARQ) |
@@ -24,8 +24,8 @@ MarketHacker — платформа для управления продажам
 - [Структура проекта](./architecture/structure.md)
 - [Модель данных](./architecture/data-model.md)
 - [Контроль доступа](./architecture/access-control.md)
-- [Доступ к кабинетам MP](./architecture/marketplace-access-model.md) — section permissions, proxy, extension
-- [WB Portal Proxy](./architecture/wb-portal-proxy.md) — reverse proxy к seller.wildberries.ru, Guided Connect, JS-инжект
+- [Доступ к кабинетам MP](./architecture/marketplace-access-model.md) — section permissions, WB Gateway
+- [WB Gateway & Guided Connect](./architecture/wb-portal-proxy.md) — reverse proxy к seller.wildberries.ru, Guided Connect, JS-инжект
 - [Аутентификация и авторизация](./architecture/authentication.md)
 - [Безопасность](./architecture/security.md)
 - [Дизайн API](./architecture/api-design.md)
@@ -45,8 +45,8 @@ MarketHacker — платформа для управления продажам
 
 Документация отражает текущее состояние реализации (июль 2026):
 
-- **WB Portal Proxy** — развёрнут на `wb-proxy.markethacker.ru`: reverse proxy, JS guard, 6 групп section permissions, блокировка профиля WB
-- **Guided Connect** — привязка WB-сессии через popup без DevTools; HttpOnly cookies накапливаются server-side
+- **WB Gateway** — развёрнут на `wb-proxy.markethacker.ru`: reverse proxy, JWT-сессия с мгновенным Redis-отзывом, JS guard, default-deny ACL, 6 групп section permissions, блокировка профиля WB
+- **WB Connect (Guided Connect)** — развёрнут на `wb-connect.markethacker.ru` + onboarding-поддомены: привязка WB-сессии через popup без DevTools; HttpOnly cookies накапливаются server-side
 - **Manager Portal** — `team.markethacker.ru`: кабинеты, команда, приглашения, section grants, биллинг, `WbConnectModal`
 - **Биллинг** — ЮKassa (RUB) + Stripe, webhook, фоновая сверка платежей, автопродление
 - **Search Tags API** — `GET /api/v1/search-tags/queries` и `/queries/monthly`: read-only данные парсера WB из ClickHouse, фича `search_tags`

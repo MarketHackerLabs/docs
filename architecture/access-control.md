@@ -91,7 +91,7 @@ deny-by-default — фактические возможности участни
 Участник (не владелец) получает доступ к конкретному кабинету и его разделам
 только через явные записи, которые выдаёт владелец. Подробности модели,
 таблиц (`UserMarketplaceAccount`, `UserMarketplaceSectionAccess`) и enforcement
-в WB Portal Proxy — в [Модели доступа к кабинетам MP](./marketplace-access-model.md).
+в WB Gateway — в [Модели доступа к кабинетам MP](./marketplace-access-model.md).
 
 Важно: даже владелец организации получает доступ к своим кабинетам через те
 же самые грант-таблицы — просто гранты выдаются ему автоматически в момент
@@ -109,7 +109,7 @@ deny-by-default — фактические возможности участни
 
 | Фича (значение в БД) | Что открывает | Чей тариф проверяется | Зависимость |
 |---|---|---|---|
-| `team_management` (`MANAGER_PORTAL`) | Manager-portal целиком: команда, приглашения, кабинеты MP, WB proxy | тариф **владельца организации** | `require_manager_portal` |
+| `team_management` (`MANAGER_PORTAL`) | Manager-portal целиком: команда, приглашения, кабинеты MP, WB Gateway | тариф **владельца организации** | `require_manager_portal` |
 | `search_tags` (`SEARCH_TAGS`) | Поисковые запросы WB (`/search-tags/*`), данные парсинга из ClickHouse | **личный** тариф пользователя, без привязки к org | `require_search_tags_feature` |
 
 ```python
@@ -231,7 +231,7 @@ async def require_org_path_context(
 
 | Документ | Содержание |
 |---|---|
-| [Модель доступа к кабинетам MP](./marketplace-access-model.md) | Гранты на кабинеты/разделы, WB Portal Proxy, приглашения |
+| [Модель доступа к кабинетам MP](./marketplace-access-model.md) | Гранты на кабинеты/разделы, WB Gateway, приглашения |
 | [Аутентификация](./authentication.md) | JWT, refresh tokens, MFA |
 | [Модель данных](./data-model.md) | ER-диаграмма, таблицы |
 | [Биллинг и оплата](./billing.md) | Тарифы, фичи, лимиты |

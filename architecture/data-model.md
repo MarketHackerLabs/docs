@@ -19,7 +19,7 @@ erDiagram
     Organization ||--o{ Membership : has
     Organization ||--o{ MarketplaceAccount : owns
     Organization ||--o{ OrganizationInvitation : issues
-    MarketplaceAccount ||--o{ MarketplaceCredential : has
+    MarketplaceAccount ||--o| MarketplaceCredentialVault : has
     User ||--o{ UserMarketplaceAccount : assigned
     MarketplaceAccount ||--o{ UserMarketplaceAccount : has
     User ||--o{ UserMarketplaceSectionAccess : has
@@ -69,20 +69,25 @@ erDiagram
         uuid id PK
         uuid org_id FK
         enum marketplace
-        string external_seller_id
+        string supplier_id
         string display_name
-        bool is_active
+        enum status
+        datetime last_status_changed_at
         datetime created_at
     }
 
-    MarketplaceCredential {
+    MarketplaceCredentialVault {
         uuid id PK
-        uuid account_id FK
-        bytes encrypted_secret
+        uuid account_id FK "unique — один активный ряд на кабинет"
+        bytes encrypted_payload
         bytes nonce
         int key_version
-        datetime expires_at
+        datetime access_token_expires_at
+        datetime last_verified_at
+        datetime last_refreshed_at
+        int version "optimistic concurrency"
         datetime created_at
+        datetime updated_at
     }
 
     RefreshToken {
@@ -163,11 +168,12 @@ erDiagram
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `marketplace` | enum | `wildberries`, `ozon` |
-| `external_seller_id` | string | Внутренний UUID (генерируется сервером при создании) |
+| `supplier_id` | string | Реальный идентификатор продавца на маркетплейсе (для WB — `x-supplier-id`); пусто до успешного Guided Connect (`draft`/`connecting`) |
 | `display_name` | string | Человекочитаемое имя кабинета (отображается в UI и в прокси WB) |
-| `is_active` | bool | `false` после деактивации (`DELETE`) |
+| `status` | enum | Жизненный цикл: `draft` → `connecting` → `active` / `expired` / `revoked` → `archived`. Источник истины для `wb_gateway` (см. [WB Gateway & Guided Connect](./wb-portal-proxy.md#жизненный-цикл-кабинета-cabinetstatus)) |
+| `last_status_changed_at` | datetime | Момент последнего перехода статуса |
 
-**Ограничение:** не более одного активного кабинета на маркетплейс в организации.
+**Ограничение:** частичный unique index `(org_id, marketplace, supplier_id)` — применяется только к живым кабинетам (`status != 'archived'`) с уже известным `supplier_id` (`supplier_id != ''`). Несколько незавершённых `draft`/`connecting` попыток подключения одновременно разрешены осознанно (пользователь мог открыть форму в двух вкладках); дублей по одинаковому `supplier_id` в одной организации после подключения быть не может.
 
 ### UserMarketplaceAccount
 
@@ -193,16 +199,20 @@ erDiagram
 
 См. [Модель доступа к кабинетам MP](./marketplace-access-model.md).
 
-### MarketplaceCredential
+### MarketplaceCredentialVault
 
-Зашифрованные credentials для доступа к API маркетплейса. Отделены от account для ротации ключей.
+Зашифрованные credentials WB portal-сессии кабинета. В отличие от предыдущей модели (append-лог `MarketplaceCredential`) — **один активный ряд на кабинет**, обновляемый на месте.
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `encrypted_secret` | bytes | AES-256-GCM ciphertext |
+| `encrypted_payload` | bytes | AES-256-GCM ciphertext (`authorizev3`, `cookies`, `local_storage`) |
 | `nonce` | bytes | Nonce для GCM |
 | `key_version` | int | Версия ключа шифрования |
-| `expires_at` | datetime | Срок действия (если применимо) |
+| `access_token_expires_at` | datetime | Расчётный срок жизни `authorizev3` |
+| `last_verified_at` / `last_refreshed_at` | datetime | Для `credentials-status` в manager-portal |
+| `version` | int | Optimistic concurrency: обновление — `UPDATE ... WHERE account_id = :id AND version = :v`; 0 affected rows означает конкурентную запись, вызывающий код обязан повторить операцию |
+
+Подробности шифрования и жизненного цикла — [WB Gateway & Guided Connect](./wb-portal-proxy.md#хранение-credentials-marketplacecredentialvault).
 
 ### Биллинг (кратко)
 

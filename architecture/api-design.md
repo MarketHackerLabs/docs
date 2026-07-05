@@ -60,9 +60,9 @@
 | POST | `/api/v1/organizations/{org_id}/marketplace-accounts` | ✓ | владелец | Создание (`marketplace`, `displayName`) |
 | PATCH | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | владелец | Обновление `displayName` |
 | DELETE | `/api/v1/organizations/{org_id}/marketplace-accounts/{id}` | ✓ | владелец | Деактивация кабинета |
-| POST | `.../capture-init` | ✓ | владелец | Guided Connect: `captureToken`, `connectUrl`, `snippet` |
-| POST | `.../verify` | ✓ | владелец | Проверка credentials |
-| GET | `.../credentials-status` | ✓ | владелец | `hasPortalSession`, `portalSessionSavedAt` |
+| POST | `.../capture-init` | ✓ | владелец | Guided Connect: `captureToken`, `connectUrl`, `suppliersUrl`, `snippet` |
+| POST | `.../select-supplier` | ✓ | владелец | Явный выбор организации WB для уже привязанной сессии |
+| GET | `.../credentials-status` | ✓ | владелец | `status`, `hasActiveSession`, `supplierId`, `lastVerifiedAt` |
 | GET/POST/DELETE | `.../access/{user_id}` | ✓ | владелец | Список/выдача/отзыв доступа к кабинету |
 | GET/PUT | `.../access/{user_id}/sections/{key}` | ✓ | владелец (себя может смотреть сам участник) | Права на разделы WB |
 
@@ -77,15 +77,24 @@
 | POST | `/api/v1/invitations/accept` | — | — | Принятие приглашения (существующий user) |
 | POST | `/api/v1/invitations/accept-register` | — | — | Регистрация + принятие приглашения |
 
-### WB Portal Proxy
+### WB Gateway (уже подключённый кабинет)
 
 | Метод | Путь | Auth | Описание |
 |-------|------|:----:|----------|
-| POST | `/api/v1/proxy/web-handshake` | ✓ | Создать proxy-сессию, получить `callbackUrl` |
-| GET | `/api/v1/proxy/portal/connect/{token}` | — | Начать Guided Connect (Set-Cookie `mh_wb_connect`) |
-| GET | `/api/v1/proxy/portal/connect/{token}/done` | — | Страница успеха, `postMessage` в opener |
-| GET | `/api/v1/proxy/portal/*` | cookie | Reverse proxy к seller.wildberries.ru |
-| POST | `/api/v1/proxy/capture/{token}` | — | Одноразовый endpoint захвата (auto-script / snippet) |
+| POST | `/api/v1/wb-gateway/handshake` | ✓ | Открыть кабинет: JWT-сессия (jti в Redis), `callbackUrl` |
+| GET | `/api/v1/wb-gateway/auth/callback` | — (одноразовый token) | Обмен callback-токена на cookie `mh_gw_session` |
+| DELETE | `/api/v1/wb-gateway/session` | cookie | Logout — отзыв текущей gateway-сессии |
+| ANY | `/api/v1/wb-gateway/*` | cookie | Reverse proxy к seller.wildberries.ru (default-deny ACL) |
+
+### WB Connect (Guided Connect — привязка кабинета)
+
+| Метод | Путь | Auth | Описание |
+|-------|------|:----:|----------|
+| GET | `/api/v1/wb-connect/{token}` | — (opaque token) | Начать Guided Connect (Set-Cookie `mh_wb_connect`), редирект на onboarding-поддомен |
+| GET | `/api/v1/wb-connect/{token}/done` | — | Страница успеха, `postMessage` в opener |
+| GET | `/api/v1/wb-connect/{token}/suppliers` | — (opaque token) | Список организаций WB, обнаруженных во время connect |
+| POST | `/api/v1/wb-connect/capture/{token}` | — (opaque token, CORS ограничен) | Одноразовый endpoint захвата (auto-script / DevTools-сниппет) |
+| ANY | `*.wb-connect.markethacker.ru/*` | cookie `mh_wb_connect` | Onboarding subdomain-прокси (Host-based dispatch, не FastAPI-роутинг) |
 
 ### Billing
 
