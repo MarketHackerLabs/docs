@@ -81,10 +81,12 @@
 
 | Метод | Путь | Auth | Описание |
 |-------|------|:----:|----------|
-| POST | `/api/v1/wb-gateway/handshake` | ✓ | Открыть кабинет: JWT-сессия (jti в Redis), `callbackUrl` |
+| POST | `/api/v1/wb-gateway/handshake` | ✓ | Открыть кабинет: JWT-сессия (jti в Redis), `callbackUrl`, `gatewaySessionToken` (для extension) |
 | GET | `/api/v1/wb-gateway/auth/callback` | — (одноразовый token) | Обмен callback-токена на cookie `mh_gw_session` |
 | DELETE | `/api/v1/wb-gateway/session` | cookie | Logout — отзыв текущей gateway-сессии |
-| ANY | `/api/v1/wb-gateway/*` | cookie | Reverse proxy к seller.wildberries.ru (default-deny ACL) |
+| ANY | `/api/v1/wb-gateway/*` | cookie **или** `Authorization: Bearer <gatewaySessionToken>` | Reverse proxy к seller.wildberries.ru (default-deny ACL) |
+
+> **Browser extension:** после `handshake` сохраните `gatewaySessionToken` и вызывайте WB API через `https://wb-proxy.markethacker.ru/__content__/ns/...` с заголовком `Authorization: Bearer <gatewaySessionToken>` и `Origin: chrome-extension://<id>` (id должен быть в `CORS_ORIGINS`). Upstream-заголовки и cookies WB подставляет сервер из vault — extension не передаёт секреты WB.
 
 ### WB Connect (Guided Connect — привязка кабинета)
 

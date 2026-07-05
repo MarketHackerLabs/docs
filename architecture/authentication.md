@@ -144,6 +144,32 @@ sequenceDiagram
 
 На MVP достаточно email/password + refresh. PKCE добавляется при появлении web-клиента.
 
+## WB Gateway из browser extension
+
+Расширение не использует httpOnly-cookie `mh_gw_session`. Вместо этого:
+
+1. С platform access JWT: `POST /api/v1/wb-gateway/handshake { accountId }`.
+2. Сохранить `gatewaySessionToken` из ответа (TTL ≈ `wb_gateway_session_ttl_minutes`).
+3. Вызывать WB API через wb-proxy:
+
+```typescript
+await fetch(
+  "https://wb-proxy.markethacker.ru/__content__/ns/analytics-api/content-analytics/api/v1/sales-funnel/report",
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${gatewaySessionToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  },
+);
+```
+
+CSRF: для POST/PUT/PATCH/DELETE браузер extension автоматически шлёт `Origin: chrome-extension://<id>` — этот origin должен быть в `CORS_ORIGINS`. Upstream-авторизация WB (authorizev3, cookies) подставляется сервером; extension не хранит и не передаёт секреты WB.
+
+Подробнее: [WB Portal Proxy](./wb-portal-proxy.md#аутентификация-extension-к-wb-proxy).
+
 ## CORS
 
 ```python

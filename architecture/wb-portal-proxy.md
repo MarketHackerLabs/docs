@@ -125,7 +125,19 @@ sequenceDiagram
 
 ### CSRF-защита `mh_gw_session`
 
-Cookie `SameSite=None` означает, что браузер приложит её к запросу с ЛЮБОГО origin, включая посторонний вредоносный сайт. `_assert_same_origin_for_state_changing_request` (`wb_gateway/api/router.py`) сверяет `Origin`/`Referer` мутирующих запросов (не GET/HEAD/OPTIONS) с `Settings.wb_gateway_origin` — иначе единственной защитой было бы знание opaque-cookie, которое браузер сам подставляет за атакующего.
+Cookie `SameSite=None` означает, что браузер приложит её к запросу с ЛЮБОГО origin, включая посторонний вредоносный сайт. `assert_gateway_csrf_origin` (`wb_gateway/domain/csrf_origin.py`) сверяет `Origin`/`Referer` мутирующих запросов (не GET/HEAD/OPTIONS) с:
+
+- `Settings.wb_gateway_origin` — fetch/XHR из вкладки кабинета на wb-proxy;
+- `chrome-extension://<id>` из `CORS_ORIGINS` / runtime platform settings — запросы из browser extension (Origin этого типа нельзя подделать с обычных сайтов).
+
+`https://team.markethacker.ru` и прочие HTTPS-origin из CORS **намеренно не** whitelisted здесь — иначе CSRF с cookie из manager-portal.
+
+### Аутентификация extension к wb-proxy
+
+Browser extension не может полагаться на httpOnly-cookie `mh_gw_session`. Flow:
+
+1. `POST /api/v1/wb-gateway/handshake` с platform access JWT → в ответе `gatewaySessionToken` (короткоживущий JWT типа `wb_gateway_session`).
+2. Запросы к `https://wb-proxy.markethacker.ru/__content__/ns/...` с `Authorization: Bearer <gatewaySessionToken>` — сервер подставляет upstream headers/cookies из CredentialVault так же, как для вкладки кабинета.
 
 ---
 
