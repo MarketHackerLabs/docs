@@ -29,6 +29,13 @@ sequenceDiagram
     API->>AUTH: validate JWT (только user_id) + billing feature check
     API-->>EXT: data
 
+    EXT->>API: GET /extension/entitlements (Authorization: Bearer ...)
+    alt нет фичи browser_extension
+        API-->>EXT: 403 PERMISSION_DENIED
+    else доступ есть
+        API-->>EXT: capabilities, subscription, features
+    end
+
     Note over EXT: accessToken истёк
 
     EXT->>API: POST /auth/refresh (refreshToken)
@@ -143,6 +150,41 @@ sequenceDiagram
 ```
 
 На MVP достаточно email/password + refresh. PKCE добавляется при появлении web-клиента.
+
+## Доступ к браузерному расширению
+
+Фича тарифа `browser_extension` (по умолчанию на **pro** и **enterprise**) — мастер-гейт
+для клиента расширения. Login **не блокируется** при отсутствии фичи: пользователь может
+работать в manager-portal, но namespace `/extension/*` вернёт 403.
+
+После login клиент запрашивает:
+
+```
+GET /api/v1/extension/entitlements
+Authorization: Bearer <accessToken>
+```
+
+Ответ агрегирует:
+- `features` — плоский список billing features пользователя (те же ключи, что в `billing_plans.features`);
+- `capabilities` — подфичи расширения (`search_tags` и др. по мере добавления);
+- `subscription` — план, статус, `isInGracePeriod` (отмена, но период ещё не истёк).
+
+WB Gateway и организации в entitlements **не входят** — это зона manager-portal; расширение
+получит их через отдельные API, когда интеграция понадобится.
+
+Статическая конфигурация клиента (без auth):
+
+```
+GET /api/v1/extension/config
+```
+
+Рекомендуемый poll interval entitlements — `entitlementsPollIntervalSeconds` из config
+(по умолчанию 300 с). При смене тарифа сервер инвалидирует кэш effective plan (TTL 60 с).
+
+Заблокированный пользователь (`is_active=false`) получает 403 на любой аутентифицированный
+запрос, включая entitlements.
+
+Подробнее: [Дизайн API — Extension](./api-design.md#extension-browser).
 
 ## WB Gateway из browser extension
 

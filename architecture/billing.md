@@ -432,6 +432,23 @@ sequenceDiagram
 
 При истечении `trial_ends_at` подписка переводится в `cancelled`, пользователь получает лимиты free-тарифа (с учётом активных бустов).
 
+### Отмена подписки
+
+`POST /billing/subscription/cancel` переводит подписку в `status=cancelled` и отключает автопродление.
+Платные фичи и лимиты **сохраняются до `current_period_end`** — после этой даты effective plan
+переходит на free. Поле `cancelledAt` фиксирует момент отмены; `isInGracePeriod` в
+`/extension/entitlements` показывает, что доступ ещё активен до конца периода.
+
+### Фичи тарифа
+
+| Ключ | Тарифы по умолчанию | Scope | Guard |
+|------|---------------------|-------|-------|
+| `team_management` | pro, enterprise | org (владелец) | `require_manager_portal` |
+| `search_tags` | все | user | `require_search_tags_feature` |
+| `browser_extension` | pro, enterprise | user | `require_browser_extension` |
+
+Каталог для админ-панели: `GET /admin/billing/features` (`domain/features.py`).
+
 ### Админ-панель
 
 Управление промокодами: **Биллинг → Промокоды** (`/billing/promo-codes`).

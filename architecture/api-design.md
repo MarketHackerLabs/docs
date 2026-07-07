@@ -117,6 +117,79 @@
 
 > Подробнее: [Биллинг и оплата](./billing.md)
 
+### Extension (browser)
+
+Контракт для Chromium-расширения: агрегированные entitlements и статическая конфигурация клиента.
+
+| Метод | Путь | Auth | Требование | Описание |
+|-------|------|:----:|------------|----------|
+| GET | `/api/v1/extension/entitlements` | ✓ | фича `browser_extension` | Доступные capabilities, статус подписки |
+| GET | `/api/v1/extension/config` | — | — | API URLs, min version, poll interval |
+
+Аутентификация расширения — стандартный JWT (`/auth/login` с `deviceId`). Доступ к
+самому расширению проверяет guard эндпоинта (`browser_extension`). Поле `capabilities`
+содержит только подфичи расширения (сейчас — `search_tags`). WB Gateway и организации
+сюда не входят — отдельная зона manager-portal. См. [Аутентификация](./authentication.md).
+
+**Пример `GET /extension/entitlements`:**
+
+```json
+{
+  "data": {
+    "account": { "status": "active" },
+    "subscription": {
+      "planName": "pro",
+      "status": "active",
+      "currentPeriodEnd": "2026-08-07T00:00:00Z",
+      "cancelledAt": null,
+      "trialEndsAt": null,
+      "isInGracePeriod": false
+    },
+    "features": ["browser_extension", "search_tags"],
+    "capabilities": {
+      "search_tags": { "enabled": true }
+    },
+    "cacheTtlSeconds": 60,
+    "serverTime": "2026-07-08T00:00:00Z"
+  }
+}
+```
+
+**Поля ответа:**
+
+| Поле | Описание |
+|------|----------|
+| `features` | Ключи из `billing_plans.features` effective plan пользователя |
+| `capabilities` | Подфичи расширения: `enabled` + `reason` при отказе |
+| `subscription` | Статус подписки, grace period после отмены |
+
+**Capabilities (расширяемый каталог в коде):**
+
+| Ключ | Требует (billing features) | Описание |
+|------|---------------------------|----------|
+| `search_tags` | `browser_extension` + `search_tags` | Поисковые запросы WB в расширении |
+
+При `403` на `/extension/entitlements` — нет фичи `browser_extension` или истёк
+оплаченный период после отмены.
+
+#### Использование во frontend (manager-portal, admin-panel)
+
+**Manager-portal** — для UX-гейтинга достаточно `GET /users/me`:
+
+```typescript
+import { planHasFeature, PLAN_FEATURE_BROWSER_EXTENSION } from "@/lib/plan-features";
+
+const hasExtension = planHasFeature(me?.session.planFeatures, PLAN_FEATURE_BROWSER_EXTENSION);
+```
+
+`session.planFeatures` и `features` в entitlements — один и тот же набор ключей;
+в web-клиенте удобнее брать из `/users/me`.
+
+Для UI статуса подписки / grace period — `GET /extension/entitlements`
+(поле `subscription`).
+
+**Admin-panel** — фича в `FeaturesPicker` через `GET /admin/billing/features`, без доработок UI.
+
 ### Search Tags (WB)
 
 Данные парсера из ClickHouse. **Платформенные** — без привязки к org или кабинету MP. Доступ определяется **личным тарифом пользователя**, а не ролью: требуется фича `search_tags` в `billing_plans.features` (включена на тарифах `pro` / `enterprise`). См. [Контроль доступа](./access-control.md).
@@ -306,4 +379,4 @@ async function apiClient<T>(path: string, options?: RequestInit): Promise<T> {
 
 - Доступен по `/openapi.json` и `/docs` (Swagger UI).
 - В production `/docs` отключён или защищён.
-- Tags соответствуют модулям: `auth`, `users`, `organizations`, `marketplace`, `search-tags`, `billing`, `admin`.
+- Tags соответствуют модулям: `auth`, `users`, `organizations`, `marketplace`, `search-tags`, `billing`, `extension`, `admin`.
