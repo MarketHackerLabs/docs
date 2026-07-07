@@ -16,6 +16,8 @@
 | Сущность | Таблица | Описание |
 |----------|---------|----------|
 | `BillingPlan` | `billing_plans` | Каталог тарифов (`free`, `pro`, `enterprise`) |
+| `BillingClient` | `billing_clients` | Справочник клиентов платформы (manager-portal, extension, …) |
+| `BillingPlanClientVisibility` | `billing_plan_client_visibility` | M:N — в каких клиентах виден тариф |
 | `BillingSubscription` | `billing_subscriptions` | Активная подписка пользователя (unique `user_id`) |
 | `BillingPayment` | `billing_payments` | Запись платежа ЮKassa (идемпотентность, аудит) |
 | `BillingSavedPaymentMethod` | `billing_saved_payment_methods` | Сохранённая карта для автопродления |
@@ -83,13 +85,73 @@ arq markethacker.infrastructure.jobs.WorkerSettings
 
 В Docker Compose сервис `worker` уже настроен в `backend/docker-compose.yml`.
 
+## Видимость тарифов по клиентам
+
+Каталог тарифов может отличаться для разных клиентов платформы (manager-portal,
+браузерное расширение и будущие приложения). Это **отдельно** от фич тарифа
+(`team_management`, `browser_extension`): видимость определяет, какие планы
+показываются в UI и доступны для оформления, а не что пользователь может
+делать после покупки.
+
+### Идентификация клиента
+
+Клиент передаёт контекст через заголовок (приоритет) или query-параметр:
+
+```
+X-MarketHacker-Client: manager_portal
+GET /api/v1/billing/plans?client=manager_portal
+```
+
+| Контекст | Поведение |
+|----------|-----------|
+| Заголовок / query не передан | Все активные тарифы (обратная совместимость) |
+| Неизвестный или отключённый клиент | `400 Bad Request` |
+| Валидный клиент | Только тарифы, у которых клиент указан в `billing_plan_client_visibility` |
+| Пустой список клиентов у тарифа + указан `client` | Тариф **не** попадает в каталог этого клиента |
+
+Семантика «пустой список = виден везде» **не используется**. Без контекста клиента
+фильтр не применяется; с контекстом — только явные связи M:N.
+
+`GET /billing/subscription` **не фильтруется** — текущий план пользователя
+возвращается всегда, даже если тариф скрыт в каталоге клиента.
+
+`POST /billing/subscription/upgrade` и promo-эндпоинты проверяют видимость
+тарифа для указанного клиента.
+
+### Администрирование
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/admin/billing/clients` | Справочник клиентов |
+| POST | `/admin/billing/clients` | Создать клиента (`planNames` — опционально) |
+| PATCH | `/admin/billing/clients/{id}` | Обновить клиента |
+| GET | `/admin/billing/clients/{id}/plans` | Список `planNames`, видимых для клиента |
+| PUT | `/admin/billing/clients/{id}/plans` | Задать видимые тарифы клиента (`planNames`) |
+| GET/PATCH | `/admin/billing/plans` | Каталог тарифов + поле `visibleClients` |
+
+В admin-panel:
+
+- **Биллинг → Клиенты** — настройка «какие тарифы видит этот клиент» (рекомендуется
+  для сценария «в manager-portal только enterprise»).
+- **Биллинг → Тарифы** — настройка «в каких клиентах виден этот тариф» (чекбоксы
+  `visibleClients`).
+
+При создании клиента без `planNames` он автоматически добавляется во видимость всех
+активных тарифов; дальше список сужают на странице **Клиенты** или **Тарифы**.
+
+**Manager-portal** уже передаёт `X-MarketHacker-Client: manager_portal` и
+`?client=manager_portal` в `GET /billing/plans` и `POST /subscription/upgrade`.
+
+Миграция `20260708_0023` создаёт клиентов `manager_portal` и `browser_extension`
+и делает все существующие тарифы видимыми в обоих клиентах.
+
 ## API эндпоинты
 
 ### Пользовательские (`/api/v1/billing/*`)
 
 | Метод | Путь | Auth | Описание |
 |-------|------|:----:|----------|
-| GET | `/billing/plans` | — | Список активных тарифов |
+| GET | `/billing/plans` | — | Список активных тарифов (опционально `X-MarketHacker-Client`) |
 | GET | `/billing/subscription` | ✓ | Текущая подписка или `null` (free) |
 | POST | `/billing/subscription/upgrade` | ✓ | Оформление подписки → checkout URL |
 | POST | `/billing/subscription/cancel` | ✓ | Отмена (доступ до конца периода) |

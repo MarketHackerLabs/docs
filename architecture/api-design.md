@@ -102,7 +102,7 @@
 
 | Метод | Путь | Auth | Описание |
 |-------|------|:----:|----------|
-| GET | `/api/v1/billing/plans` | — | Список тарифов |
+| GET | `/api/v1/billing/plans` | — | Список тарифов (фильтр по `X-MarketHacker-Client`) |
 | GET | `/api/v1/billing/subscription` | ✓ | Текущая подписка |
 | POST | `/api/v1/billing/subscription/upgrade` | ✓ | Оформление подписки (checkout) |
 | POST | `/api/v1/billing/subscription/cancel` | ✓ | Отмена подписки |
@@ -116,6 +116,27 @@
 | POST | `/api/v1/billing/webhooks/stripe` | Signature | Webhook Stripe |
 
 > Подробнее: [Биллинг и оплата](./billing.md)
+
+#### Заголовок `X-MarketHacker-Client`
+
+Клиенты платформы передают ключ приложения при запросе каталога тарифов,
+оформлении подписки и promo-эндпоинтах:
+
+```
+X-MarketHacker-Client: manager_portal
+GET /api/v1/billing/plans?client=manager_portal
+```
+
+Приоритет: заголовок, затем query `?client=`. Допустимые ключи — из справочника
+`billing_clients` (admin API). Без контекста каталог не фильтруется (legacy).
+
+| Ключ (seed) | Приложение |
+|-------------|------------|
+| `manager_portal` | Manager-portal (уже интегрирован) |
+| `browser_extension` | Chromium-расширение (**нужно добавить заголовок на фронте**) |
+
+При попытке оформить тариф, скрытый для клиента, API вернёт `400` с текстом в поле
+`detail` (стандартный формат FastAPI `HTTPException`).
 
 ### Extension (browser)
 

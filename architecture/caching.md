@@ -74,9 +74,14 @@ modules/admin/infrastructure/clickhouse/queries/
 
 ```
 modules/billing/infrastructure/cached/
-├── get_all_plans.py      # каталог тарифов, platform, TTL 1 ч
+├── get_all_plans.py      # каталог активных тарифов (platform), TTL 1 ч
 ├── effective_plan.py     # тариф пользователя, user scope, TTL 60 с
-└── _plan_codec.py        # сериализация BillingPlan (не политика)
+└── _plan_codec.py        # сериализация BillingPlanCatalogEntry (не политика)
+
+Каталог в Redis **не используется** для M:N-фильтрации по клиенту: при переданном
+`X-MarketHacker-Client` / `?client=` связи читаются из PostgreSQL на каждый
+`GET /billing/plans`. Кэш инвалидируется при изменении тарифов, клиентов или
+видимости в admin API.
 
 modules/organizations/infrastructure/cached/
 └── list_roles.py         # каталог ролей, platform, TTL 1 ч
@@ -108,11 +113,11 @@ def fetch(params: ListSearchQueriesParams) -> tuple[list[SearchTagListRow], int]
 @cached_read(
     namespace="billing:plans",
     ttl_seconds=60 * 60,
-    serialize=plans_to_dict,
-    deserialize=plans_from_dict,
+    serialize=catalog_to_dict,
+    deserialize=catalog_from_dict,
 )
-async def fetch(repo: BillingRepository) -> list[BillingPlan]:
-    return await repo.get_all_plans()
+async def fetch(repo: BillingRepository) -> list[BillingPlanCatalogEntry]:
+    return await repo.get_active_plans_catalog()
 ```
 
 На обёртке доступен `fetch.cache_policy` (namespace, ttl) — для инвалидации.
@@ -152,7 +157,7 @@ from markethacker.infrastructure.cache.decorators import (
     invalidate_cached_namespace,
 )
 
-# Весь каталог (platform)
+# Весь каталог (platform) — удаляет и billing:plans, и billing:plans:*
 await invalidate_cached_namespace(plans_catalog.fetch)
 
 # Один пользователь (user scope)
@@ -166,7 +171,8 @@ await effective_plan_cache.invalidate(user_id)
 - активации промокода;
 - изменении подписки в админке.
 
-Инвалидация каталога тарифов — при create/update плана в админке.
+Инвалидация каталога тарифов — при create/update плана, create/update клиента,
+изменении `visibleClients` / `planNames` в admin API.
 
 ## Конфигурация
 
