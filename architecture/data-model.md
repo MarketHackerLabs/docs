@@ -208,8 +208,8 @@ erDiagram
 | `encrypted_payload` | bytes | AES-256-GCM ciphertext (`authorizev3`, `cookies`, `local_storage`) |
 | `nonce` | bytes | Nonce для GCM |
 | `key_version` | int | Версия ключа шифрования |
-| `access_token_expires_at` | datetime | Расчётный срок жизни `authorizev3` |
-| `last_verified_at` / `last_refreshed_at` | datetime | Для `credentials-status` в manager-portal |
+| `access_token_expires_at` | datetime \| null | Срок жизни `authorizev3` из JWT `exp`; у многих WB JWT `exp` нет → `NULL`, refresh по возрасту (`last_refreshed_at` / `updated_at`, `wb_token_max_age_seconds`) |
+| `last_verified_at` / `last_refreshed_at` | datetime | Для `credentials-status`; `last_refreshed_at` — якорь для slide-v3 без `exp` |
 | `version` | int | Optimistic concurrency: обновление — `UPDATE ... WHERE account_id = :id AND version = :v`; 0 affected rows означает конкурентную запись, вызывающий код обязан повторить операцию |
 
 Подробности шифрования и жизненного цикла — [WB Gateway & Guided Connect](./wb-portal-proxy.md#хранение-credentials-marketplacecredentialvault).
