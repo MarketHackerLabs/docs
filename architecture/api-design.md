@@ -193,6 +193,19 @@ WB Gateway и организации сюда не входят — отдель
 Placement: `{client}.{slot}` (`manager_portal.all` / `.dashboard` / `.team`; далее —
 `browser_extension.*`). Подробнее: [Продуктовые промо](./product-promotions.md).
 
+### Партнёры
+
+| Метод | Путь | Auth | Описание |
+|-------|------|------|----------|
+| GET/POST | `/api/v1/partners/public/r/{code}` | — | Resolve + click + cookie; client bonus без партнёрских % |
+| GET | `/api/v1/partners/me` | ✓ partner | Профиль (API; UI-кабинета в Manager Portal нет) |
+| GET | `/api/v1/partners/me/campaigns` | ✓ partner | Мои кампании |
+| GET | `/api/v1/partners/me/analytics` | ✓ partner | Сводка |
+| CRUD | `/api/v1/admin/partners` | superuser | Admin Panel: партнёры и кампании |
+
+Клиентский путь в Manager Portal: `?ref=` на `/register` + промокод на `/billing`.
+Подробнее: [Партнёры](./partners.md).
+
 **Поля ответа entitlements:**
 
 | Поле | Описание |
@@ -417,4 +430,4 @@ async function apiClient<T>(path: string, options?: RequestInit): Promise<T> {
 
 - Доступен по `/openapi.json` и `/docs` (Swagger UI).
 - В production `/docs` отключён или защищён.
-- Tags соответствуют модулям: `auth`, `users`, `organizations`, `marketplace`, `search-tags`, `billing`, `promotions`, `extension`, `admin`.
+- Tags соответствуют модулям: `auth`, `users`, `organizations`, `marketplace`, `search-tags`, `billing`, `promotions`, `partners`, `extension`, `admin`.

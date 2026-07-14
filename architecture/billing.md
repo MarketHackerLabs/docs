@@ -220,7 +220,12 @@ GET /api/v1/billing/plans?client=manager_portal
 
 #### POST /billing/promo/validate
 
-Проверяет промокод без изменения состояния. Для `discount` возвращает расчёт суммы.
+Проверяет промокод без изменения состояния.
+
+Для `discount` всегда возвращаются `discountPercent` и/или `discountAmount`.
+Суммы чека (`originalAmount`, `discountApplied`, `finalAmount`) считаются
+**только если** в запросе передан конкретный `planName` — иначе UI показывает
+процент/фикс без привязки к одному тарифу (разные планы стоят по-разному).
 
 ```json
 {
@@ -230,7 +235,7 @@ GET /api/v1/billing/plans?client=manager_portal
 }
 ```
 
-Пример ответа (скидка):
+Пример ответа (скидка % без `planName`):
 
 ```json
 {
@@ -238,6 +243,21 @@ GET /api/v1/billing/plans?client=manager_portal
     "code": "SUMMER20",
     "promoType": "discount",
     "valid": true,
+    "discountPercent": "20.00",
+    "targetPlan": null
+  }
+}
+```
+
+Пример ответа (скидка с `planName=pro`):
+
+```json
+{
+  "data": {
+    "code": "SUMMER20",
+    "promoType": "discount",
+    "valid": true,
+    "discountPercent": "20.00",
     "planName": "pro",
     "checkoutBillingPeriod": "monthly",
     "originalAmount": "2990.00",
@@ -246,6 +266,9 @@ GET /api/v1/billing/plans?client=manager_portal
   }
 }
 ```
+
+Ошибки (`PromoCodeError`) уходят в стандартный `error.message` (например
+«Промокод не найден», «Срок действия промокода истёк»).
 
 #### POST /billing/promo/redeem
 
@@ -465,7 +488,7 @@ sequenceDiagram
     participant YK as ЮKassa
 
     Client->>API: POST /billing/promo/validate
-    API-->>Client: original_amount, final_amount
+    API-->>Client: discountPercent / discountAmount<br/>(+ суммы чека, если передан planName)
 
     Client->>API: POST /billing/subscription/upgrade (promo_code)
     API->>API: promo_code_redemptions (status=pending)
@@ -477,6 +500,14 @@ sequenceDiagram
 - Скидка применяется **только к первому платежу**. Автопродление — по полной цене тарифа.
 - Минимальная сумма checkout после скидки — **1 ₽**.
 - Pending-redemption истекает через 24 ч, если checkout не завершён.
+
+### Партнёрские (managed) промокоды
+
+Кампания типа `promo_code` создаёт запись в `promo_codes` с `origin=partner` и
+`partner_campaign_id`. Описание: «Партнёрская кампания «…»». Такие коды
+участвуют в `/billing/promo/*` и в attribution, но **скрыты** из админского
+списка **Биллинг → Промокоды** (управляются из **Партнёры**). Подробнее:
+[Партнёры](./partners.md).
 
 ### Буст лимитов (limits_boost)
 
@@ -597,10 +628,14 @@ modules/billing/
 
 ## Интеграция во фронтенде
 
-**Manager Portal** — страница `/billing`:
+**Manager Portal** — страница `/billing` (компонент `BillingWorkspace`):
 
+- доступна любому авторизованному пользователю (подписка per-user; организация
+  не обязательна);
 - текущая подписка и usage (включая `baseLimit`, `grandfathered`, `purchasedExtra`);
-- блок докупки лимитов: каталог, покупка, активные entitlements, отмена автопродления.
+- единый блок: тарифы + промокод + докупка лимитов + отмена подписки;
+- для `discount` на карточках планов — зачёркнутая старая цена и новая со скидкой;
+- `POST /billing/subscription/upgrade` принимает optional `promoCode`.
 
 После редиректа с оплаты подписки или докупки:
 
@@ -616,4 +651,5 @@ if (paymentId) {
 
 - тестовый платёж: **Настройки → Оплата (ЮKassa) → Проверить интеграцию**;
 - промокоды: **Биллинг → Промокоды**;
-- докупка лимитов: **Биллинг → Докупка лимитов** (продукты + режим оплаты).
+- докупка лимитов: **Биллинг → Докупка лимитов** (продукты + режим оплаты);
+- партнёры: **Партнёры** (профили, кампании, аналитика). См. [Партнёры](./partners.md).

@@ -45,6 +45,7 @@ flowchart TB
         TAGS[Search Tags]
         BILLING[Billing]
         PROMO[Product Promotions]
+        PARTNERS[Partners]
         JOBS[Background Jobs]
     end
 
@@ -59,9 +60,10 @@ flowchart TB
     MP --> GW
     PROXY --> GW
     GW --> AUTH --> ACL
-    ACL --> ORG & MP & TAGS & BILLING & PROMO
+    ACL --> ORG & MP & TAGS & BILLING & PROMO & PARTNERS
     ORG & MP --> PG
     PROMO --> PG
+    PARTNERS --> PG
     TAGS --> CH
     AUTH --> REDIS
     JOBS --> REDIS
@@ -106,6 +108,7 @@ flowchart TB
 | [Кэширование](./caching.md) | Redis response cache, `@cached_read`, области данных, инвалидация |
 | [Биллинг и оплата](./billing.md) | Подписки, промокоды, докупка лимитов, ЮKassa, webhook, фоновая сверка |
 | [Продуктовые промо](./product-promotions.md) | Баннеры / CTA в клиентах, placements, targeting |
+| [Партнёры](./partners.md) | Кампании, атрибуция, комиссии, аналитика |
 | [Фоновые задачи](./background-jobs.md) | Синхронизация с маркетплейсами |
 | [Parser Service](./parser.md) | Платформа фоновых задач, Kafka → ClickHouse |
 | [Разработка парсеров](./parser-development.md) | Новые парсеры, включение Kafka |

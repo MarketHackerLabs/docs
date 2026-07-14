@@ -23,6 +23,7 @@ backend/
 │           ├── search_tags/
 │           ├── billing/
 │           ├── promotions/
+│           ├── partners/
 │           ├── extension/
 │           ├── admin/
 │           ├── wb_connect/
@@ -83,6 +84,7 @@ flowchart BT
 | `search_tags` | Поисковые запросы WB (ClickHouse, read-only) |
 | `billing` | Подписки, тарифы, лимиты, промокоды, ЮKassa/Stripe |
 | `promotions` | Продуктовые баннеры / CTA в клиентах платформы |
+| `partners` | Партнёрская программа: кампании, атрибуция, комиссии |
 | `extension` | Entitlements и remote config браузерного расширения |
 | `admin` | Админ-панель, управление тарифами и парсером |
 | `wb_connect` | Guided Connect — первичная привязка кабинета WB (onboarding subdomain-прокси) |

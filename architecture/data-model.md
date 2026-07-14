@@ -234,6 +234,17 @@ erDiagram
 | `billing_limit_addon_entitlements` | Активные докупки пользователя |
 | `promo_codes` / `promo_code_redemptions` | Промокоды биллинга и их использование |
 
+### Партнёры
+
+| Таблица | Назначение |
+|---------|------------|
+| `partners` | Профиль партнёра (1:1 с `users`) |
+| `partner_campaigns` / `partner_campaign_channels` | Кампании и каналы |
+| `partner_clicks` / `partner_attributions` | Клики и first-touch привязки |
+| `partner_commission_ledger` | Идемпотентные начисления |
+
+Миграция: `20260714_0029_partners_affiliate`. Подробнее: [Партнёры](./partners.md).
+
 ### Продуктовые промо (баннеры)
 
 | Таблица | Назначение |
