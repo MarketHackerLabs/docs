@@ -95,7 +95,8 @@ flowchart TB
 | [Структура проекта](./structure.md) | Дерево каталогов и организация модулей |
 | [Модель данных](./data-model.md) | Сущности, связи, ER-диаграмма |
 | [Контроль доступа](./access-control.md) | Владение org, member-access гранты, billing-гейты |
-| [Доступ к кабинетам MP](./marketplace-access-model.md) | Гранты на кабинеты/разделы, proxy, extension |
+| [Доступ к кабинетам MP](./marketplace-access-model.md) | Привязка к кабинету, proxy, extension |
+| [Роли доступа к кабинетам MP](./wb-access-roles.md) | Именованные роли, grants, каталог по маркетплейсу |
 | [Аутентификация](./authentication.md) | Потоки auth для extension, токены |
 | [Безопасность](./security.md) | Шифрование, изоляция, audit |
 | [Дизайн API](./api-design.md) | Версионирование, эндпоинты, ошибки |

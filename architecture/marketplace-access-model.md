@@ -6,39 +6,39 @@
 
 ## Обзор
 
-Доступ к кабинету MP — это **два независимых уровня явных грантов**, которые
-выдаёт владелец организации. Здесь нет ролей: гранты либо есть у конкретного
-пользователя на конкретный кабинет/раздел, либо доступа нет (deny-by-default).
+Доступ к кабинету MP строится так:
+
+1. **Привязка к кабинету** (`user_marketplace_accounts`) — есть ли доступ.
+2. **Именованная роль доступа** (`wb_access_roles` + grants + assignment,
+   per marketplace) — какие разделы и capabilities открыты. Подробности —
+   [Роли доступа к кабинетам MP](./wb-access-roles.md).
+
+Историческая таблица `user_marketplace_section_access` сохранена для миграции;
+runtime enforcement в gateway читает role grants.
 
 ```mermaid
 flowchart TB
-    subgraph tier1 [Уровень 1 — Привязка к кабинету]
+    subgraph tier1 [Привязка]
         ACC[UserMarketplaceAccount]
     end
 
-    subgraph tier2 [Уровень 2 — Разделы кабинета]
-        SEC[UserMarketplaceSectionAccess]
-        SEC --> GROWTH[growth]
-        SEC --> PROD[products]
-        SEC --> SHIP[shipments]
-        SEC --> ANAL[analytics]
-        SEC --> PROMO[promotion]
-        SEC --> FIN[finances]
+    subgraph tier2 [Роль]
+        Role[WbAccessRole]
+        Grant[WbAccessRoleGrant]
+        Assign[UserMarketplaceRoleAssignment]
     end
 
-    OWNER[Владелец org] -->|выдаёт гранты| ACC
-    OWNER -->|выдаёт гранты| SEC
-    USER[Участник] --> ACC --> SEC
+    OWNER[Владелец org] -->|назначает| Assign
+    USER[Участник] --> ACC --> Assign --> Role --> Grant
 ```
 
 | Уровень | Что контролирует | Таблица |
 |---|---|---|
 | **1. Account binding** | К какому кабинету продавца привязан пользователь | `user_marketplace_accounts` |
-| **2. Section permissions** | Какие разделы кабинета MP видит пользователь | `user_marketplace_section_access` |
+| **2. Role grants** | Разделы и capabilities (и задел brand/article) | `wb_access_*` |
 
-Право *выдавать* и *отзывать* эти гранты — не отдельное permission, а прямое
-следствие владения организацией (`OrganizationAccess.assert_owner`, см.
-[Контроль доступа](./access-control.md)).
+Право *выдавать* и *отзывать* эти права — следствие владения организацией
+(`OrganizationAccess.assert_owner`, см. [Контроль доступа](./access-control.md)).
 
 ---
 

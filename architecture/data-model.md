@@ -158,7 +158,7 @@ erDiagram
 | `email` | string | Email приглашённого |
 | `token_hash` | string | Хэш одноразового токена |
 | `status` | string | `pending` / `accepted` / `revoked` / `expired` |
-| `account_grants` | jsonb | Список `{marketplace_account_id, sections}` |
+| `account_grants` | jsonb | Список `{marketplace_account_id, role_id?}` (+ legacy sections) |
 | `expires_at` | datetime | TTL 7 дней |
 
 ### MarketplaceAccount
@@ -187,15 +187,20 @@ erDiagram
 
 ### UserMarketplaceSectionAccess
 
-Гранулярные права на разделы кабинета (уровень 3).
+> **Deprecated как источник истины.** Runtime ACL строится из ролей доступа MP
+> ([`wb-access-roles.md`](./wb-access-roles.md)). Таблица сохранена для
+> миграции и legacy write-through PUT sections.
 
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `user_id` | UUID | FK → User |
 | `marketplace_account_id` | UUID | FK → MarketplaceAccount |
-| `section_key` | string | `growth`, `products`, `shipments`, `analytics`, `promotion`, `finances` (WB) |
-| `can_read` | bool | Доступ на чтение раздела |
-| `can_write` | bool | Доступ на изменение (где применимо) |
+| `section_key` | string | `growth`, `products`, … |
+| `can_read` / `can_write` | bool | Legacy mirrors |
+
+Новые таблицы: `wb_access_roles` (поле `marketplace`, unique
+`(org_id, marketplace, key)`), `wb_access_role_grants`,
+`user_marketplace_role_assignments` — см. [Роли доступа к кабинетам MP](./wb-access-roles.md).
 
 См. [Модель доступа к кабинетам MP](./marketplace-access-model.md).
 

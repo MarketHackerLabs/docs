@@ -2,15 +2,16 @@
 
 ## Принцип
 
-Права принадлежат **пользователю**, а не организации. В системе нет ролей и нет
-таблицы permissions — вместо этого три независимых источника прав:
+Права принадлежат **пользователю**, а не организации. Для Manager Portal
+владение и членство устроены так:
 
-1. **Владение организацией** (`Organization.owner_id`) — кто может управлять
-   самой организацией, её кабинетами и командой.
-2. **Явные гранты на кабинет/раздел** (`member_access`) — что конкретно видит
-   участник, не являющийся владельцем.
+1. **Владение организацией** (`Organization.owner_id`) — кто управляет
+   организацией, кабинетами и командой.
+2. **Явные гранты на кабинет** (`member_access` + **роли доступа MP**) — что
+   видит участник в кабинете маркетплейса (разделы и capabilities). См.
+   [Роли доступа к кабинетам MP](./wb-access-roles.md).
 3. **Тариф пользователя/организации** (billing features) — какие функции
-   продукта вообще доступны, независимо от того, кто есть кто.
+   продукта доступны.
 
 Организации не «переключаются» и не хранятся в сессии — это просто список
 ресурсов, которыми владеет или в которых состоит пользователь. У одного
@@ -203,18 +204,20 @@ async def require_org_path_context(
 | `GET`/`POST`/`DELETE` | `/organizations/{org_id}/invitations` | Только владелец |
 | `GET` | `/invitations/preview/{token}` | Публично (по токену приглашения) |
 | `POST`/`DELETE` | `/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}` | Только владелец |
-| `GET`/`PUT` | `/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}/sections/{key}` | Владелец (сам участник — только чтение своих) |
+| `PUT` | `/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}/role` | Только владелец — назначить роль доступа MP |
+| `GET` | `/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}/effective` | Владелец / сам участник — effective ACL |
+| `GET`/`CRUD` | `/organizations/{org_id}/wb-access/roles` | Владелец — именованные роли (per marketplace) |
+| `GET`/`PUT` | `/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}/sections/{key}` | Legacy write-through (deprecated как источник истины) |
 
 ---
 
 ## Приглашения
 
-Приглашение (`OrganizationInvitation`) не несёт роли. Владелец при создании
-приглашения сразу указывает `account_grants` — список кабинетов и разделов,
-которые получит приглашённый после принятия. Гранты применяются атомарно в
-момент `accept_invitation`/`accept_with_register` — участник не может
-временно оказаться «в команде без единого доступа», но и не получает больше,
-чем ему явно выдали.
+Приглашение (`OrganizationInvitation`) не несёт роли Manager Portal. Владелец
+при создании сразу указывает `account_grants` — список кабинетов и опционально
+`roleId` роли доступа MP. Гранты применяются атомарно в момент
+`accept_invitation`/`accept_with_register`. Роль в grant должна совпадать с
+маркетплейсом кабинета; иначе при accept — ошибка валидации.
 
 ---
 
@@ -233,7 +236,8 @@ async def require_org_path_context(
 
 | Документ | Содержание |
 |---|---|
-| [Модель доступа к кабинетам MP](./marketplace-access-model.md) | Гранты на кабинеты/разделы, WB Gateway, приглашения |
+| [Модель доступа к кабинетам MP](./marketplace-access-model.md) | Привязка к кабинету, gateway, приглашения |
+| [Роли доступа к кабинетам MP](./wb-access-roles.md) | Именованные роли, grants, per-marketplace каталог |
 | [Аутентификация](./authentication.md) | JWT, refresh tokens, MFA |
 | [Модель данных](./data-model.md) | ER-диаграмма, таблицы |
 | [Биллинг и оплата](./billing.md) | Тарифы, фичи, лимиты |
