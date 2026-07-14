@@ -506,14 +506,22 @@ sequenceDiagram
 | Ключ | Тарифы по умолчанию | Scope | Guard |
 |------|---------------------|-------|-------|
 | `team_management` | pro, enterprise | org (владелец) | `require_manager_portal` |
-| `search_tags` | все | user | `require_search_tags_feature` |
-| `browser_extension` | pro, enterprise | user | `require_browser_extension` |
+| `search_tags` | все | user ∪ org seat | `require_search_tags_feature` |
+| `browser_extension` | pro, enterprise | user ∪ org seat | `require_browser_extension` |
+
+`user ∪ org seat` означает: фича есть на личном effective plan **или**
+пользователь — активный участник org, у владельца которой фича есть в плане.
+Единый резолвер: `BillingService.resolve_user_feature_keys` /
+`user_has_feature`.
 
 Каталог для админ-панели: `GET /admin/billing/features` (`domain/features.py`).
 
 ### Админ-панель
 
 Управление промокодами: **Биллинг → Промокоды** (`/billing/promo-codes`).
+
+> **Не путать:** продуктовые баннеры Manager Portal — отдельный модуль
+> [`promotions`](./product-promotions.md) (UI: **Продвижение → Баннеры**), не промокоды.
 
 ## Рекуррентные платежи (автопродление)
 

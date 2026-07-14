@@ -232,9 +232,20 @@ erDiagram
 | `billing_payments` | Платежи ЮKassa / Stripe |
 | `billing_limit_addon_products` | Каталог продуктов докупки лимитов |
 | `billing_limit_addon_entitlements` | Активные докупки пользователя |
-| `promo_codes` / `promo_code_redemptions` | Промокоды и их использование |
+| `promo_codes` / `promo_code_redemptions` | Промокоды биллинга и их использование |
 
-Миграции: `20260704_0019_limit_addons`, `20260704_0020_limit_addon_billing_modes`, `20260708_0023_plan_client_visibility`.
+### Продуктовые промо (баннеры)
+
+| Таблица | Назначение |
+|---------|------------|
+| `product_promotions` | Кампании CTA / баннеров (`placement`, targeting, A/B) |
+| `product_promotion_dismissals` | Скрытия баннера пользователем |
+| `product_promotion_assignments` | Sticky assignment варианта A/B |
+
+Миграции: `20260714_0027_product_promotions`, `20260714_0028_promotion_placement_all`.
+Подробнее: [Продуктовые промо](./product-promotions.md).
+
+Миграции биллинга: `20260704_0019_limit_addons`, `20260704_0020_limit_addon_billing_modes`, `20260708_0023_plan_client_visibility`.
 
 ## Индексы
 

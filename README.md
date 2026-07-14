@@ -31,6 +31,7 @@ MarketHacker — платформа для управления продажам
 - [Дизайн API](./architecture/api-design.md)
 - [Кэширование](./architecture/caching.md) — Redis response cache, `@cached_read`, инвалидация
 - [Биллинг и оплата](./architecture/billing.md) — ЮKassa, webhook, промокоды, фоновая сверка, автопродление
+- [Продуктовые промо](./architecture/product-promotions.md) — баннеры / CTA, placements, targeting
 - [Фоновые задачи](./architecture/background-jobs.md)
 - [Parser Service](./architecture/parser.md) — платформа фоновых задач и аналитики
 - [Разработка парсеров](./architecture/parser-development.md) — Kafka, новые парсеры, чеклист деплоя

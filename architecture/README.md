@@ -8,7 +8,8 @@ MarketHacker на первом этапе — **Chromium-расширение** 
 - мультиарендность (команды, организации);
 - привязку и хранение аккаунтов маркетплейсов;
 - аналитику поисковых запросов WB (данные парсера);
-- биллинг и лимиты по тарифам (включая фичу `browser_extension` для Chromium-расширения).
+- биллинг и лимиты по тарифам (включая фичу `browser_extension` для Chromium-расширения);
+- продуктовые промо-баннеры в клиентах (Manager Portal; placement допускает extension).
 
 Расширение работает с доменами `wildberries.ru` и `ozon.ru` (см. `host_permissions` в manifest расширения).
 
@@ -43,6 +44,7 @@ flowchart TB
         MP[Marketplace Accounts]
         TAGS[Search Tags]
         BILLING[Billing]
+        PROMO[Product Promotions]
         JOBS[Background Jobs]
     end
 
@@ -57,8 +59,9 @@ flowchart TB
     MP --> GW
     PROXY --> GW
     GW --> AUTH --> ACL
-    ACL --> ORG & MP & TAGS & BILLING
+    ACL --> ORG & MP & TAGS & BILLING & PROMO
     ORG & MP --> PG
+    PROMO --> PG
     TAGS --> CH
     AUTH --> REDIS
     JOBS --> REDIS
@@ -102,6 +105,7 @@ flowchart TB
 | [Дизайн API](./api-design.md) | Версионирование, эндпоинты, ошибки |
 | [Кэширование](./caching.md) | Redis response cache, `@cached_read`, области данных, инвалидация |
 | [Биллинг и оплата](./billing.md) | Подписки, промокоды, докупка лимитов, ЮKassa, webhook, фоновая сверка |
+| [Продуктовые промо](./product-promotions.md) | Баннеры / CTA в клиентах, placements, targeting |
 | [Фоновые задачи](./background-jobs.md) | Синхронизация с маркетплейсами |
 | [Parser Service](./parser.md) | Платформа фоновых задач, Kafka → ClickHouse |
 | [Разработка парсеров](./parser-development.md) | Новые парсеры, включение Kafka |

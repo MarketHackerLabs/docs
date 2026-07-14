@@ -49,6 +49,7 @@
 | PATCH | `/api/v1/organizations/{id}` | ✓ | владелец | Обновление |
 | DELETE | `/api/v1/organizations/{id}` | ✓ | владелец | Удаление org |
 | GET | `/api/v1/organizations/{id}/members` | ✓ | член (фича `team_management`) | Список участников |
+| DELETE | `/api/v1/organizations/{id}/members/me` | ✓ | участник (не владелец) | Покинуть организацию |
 | DELETE | `/api/v1/organizations/{id}/members/{user_id}` | ✓ | владелец | Удаление участника |
 
 ### Marketplace Accounts
@@ -74,8 +75,8 @@
 | POST | `/api/v1/organizations/{org_id}/invitations` | ✓ | владелец | Приглашение с `accountGrants` (кабинеты + разделы) |
 | DELETE | `/api/v1/organizations/{org_id}/invitations/{id}` | ✓ | владелец | Отзыв приглашения |
 | GET | `/api/v1/invitations/preview/{token}` | — | — | Превью приглашения (публично) |
-| POST | `/api/v1/invitations/accept` | — | — | Принятие приглашения (существующий user) |
-| POST | `/api/v1/invitations/accept-register` | — | — | Регистрация + принятие приглашения |
+| POST | `/api/v1/invitations/accept/{token}` | ✓ | приглашённый | Принятие (email аккаунта = invitation) |
+| POST | `/api/v1/invitations/accept-register/{token}` | — | — | Регистрация + принятие; email из invitation |
 
 ### WB Gateway (уже подключённый кабинет)
 
@@ -148,9 +149,11 @@ GET /api/v1/billing/plans?client=manager_portal
 | GET | `/api/v1/extension/config` | — | — | API URLs, min version, poll interval |
 
 Аутентификация расширения — стандартный JWT (`/auth/login` с `deviceId`). Доступ к
-самому расширению проверяет guard эндпоинта (`browser_extension`). Поле `capabilities`
-содержит только подфичи расширения (сейчас — `search_tags`). WB Gateway и организации
-сюда не входят — отдельная зона manager-portal. См. [Аутентификация](./authentication.md).
+самому расширению проверяет guard эндпоинта (`browser_extension`): личный план
+**или** seat от тарифа владельца org (см. [Контроль доступа](./access-control.md)).
+Поле `capabilities` содержит только подфичи расширения (сейчас — `search_tags`).
+WB Gateway и организации сюда не входят — отдельная зона manager-portal.
+См. [Аутентификация](./authentication.md).
 
 **Пример `GET /extension/entitlements`:**
 
@@ -176,13 +179,27 @@ GET /api/v1/billing/plans?client=manager_portal
 }
 ```
 
-**Поля ответа:**
+`features` — эффективный набор (`resolve_user_feature_keys`); `subscription.planName` —
+личный план пользователя (источник billing), даже если часть фич пришла через seat.
+
+### Product promotions (баннеры)
+
+| Метод | Путь | Auth | Описание |
+|-------|------|:----:|----------|
+| GET | `/api/v1/promotions/active` | ✓ | Активные баннеры (`placement`, опционально `orgId`) |
+| POST | `/api/v1/promotions/{key}/dismiss` | ✓ | Скрыть баннер |
+| CRUD | `/api/v1/admin/promotions` | superuser | Управление кампаниями |
+
+Placement: `{client}.{slot}` (`manager_portal.all` / `.dashboard` / `.team`; далее —
+`browser_extension.*`). Подробнее: [Продуктовые промо](./product-promotions.md).
+
+**Поля ответа entitlements:**
 
 | Поле | Описание |
 |------|----------|
-| `features` | Ключи из `billing_plans.features` effective plan пользователя |
+| `features` | Эффективные ключи (`resolve_user_feature_keys`: личный ∪ org seat) |
 | `capabilities` | Подфичи расширения: `enabled` + `reason` при отказе |
-| `subscription` | Статус подписки, grace period после отмены |
+| `subscription` | Личный план / статус / grace period после отмены |
 
 **Capabilities (расширяемый каталог в коде):**
 
@@ -190,8 +207,8 @@ GET /api/v1/billing/plans?client=manager_portal
 |------|---------------------------|----------|
 | `search_tags` | `browser_extension` + `search_tags` | Поисковые запросы WB в расширении |
 
-При `403` на `/extension/entitlements` — нет фичи `browser_extension` или истёк
-оплаченный период после отмены.
+При `403` на `/extension/entitlements` — нет фичи `browser_extension` (лично и через seat)
+или истёк оплаченный период после отмены.
 
 #### Использование во frontend (manager-portal, admin-panel)
 
@@ -400,4 +417,4 @@ async function apiClient<T>(path: string, options?: RequestInit): Promise<T> {
 
 - Доступен по `/openapi.json` и `/docs` (Swagger UI).
 - В production `/docs` отключён или защищён.
-- Tags соответствуют модулям: `auth`, `users`, `organizations`, `marketplace`, `search-tags`, `billing`, `extension`, `admin`.
+- Tags соответствуют модулям: `auth`, `users`, `organizations`, `marketplace`, `search-tags`, `billing`, `promotions`, `extension`, `admin`.

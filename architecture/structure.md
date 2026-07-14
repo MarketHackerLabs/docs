@@ -22,6 +22,8 @@ backend/
 │           ├── marketplace_accounts/
 │           ├── search_tags/
 │           ├── billing/
+│           ├── promotions/
+│           ├── extension/
 │           ├── admin/
 │           ├── wb_connect/
 │           └── wb_gateway/
@@ -80,6 +82,8 @@ flowchart BT
 | `marketplace_accounts` | Привязка WB/Ozon, хранение credentials |
 | `search_tags` | Поисковые запросы WB (ClickHouse, read-only) |
 | `billing` | Подписки, тарифы, лимиты, промокоды, ЮKassa/Stripe |
+| `promotions` | Продуктовые баннеры / CTA в клиентах платформы |
+| `extension` | Entitlements и remote config браузерного расширения |
 | `admin` | Админ-панель, управление тарифами и парсером |
 | `wb_connect` | Guided Connect — первичная привязка кабинета WB (onboarding subdomain-прокси) |
 | `wb_gateway` | Reverse proxy к seller.wildberries.ru для уже подключённых кабинетов |

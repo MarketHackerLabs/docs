@@ -39,7 +39,7 @@ flowchart TB
     subgraph PLAN [Тариф]
         MP_FEATURE["billing_plans.features: team_management\n→ доступен ли manager-portal организации"]
         ST_FEATURE["billing_plans.features: search_tags\n→ доступны ли поисковые запросы WB пользователю"]
-        EXT_FEATURE["billing_plans.features: browser_extension\n→ доступно ли браузерное расширение пользователю"]
+        EXT_FEATURE["billing_plans.features: browser_extension\n→ личный план ∪ org seat"]
     end
 
     USER --> OWN
@@ -111,9 +111,14 @@ deny-by-default — фактические возможности участни
 
 | Фича (значение в БД) | Что открывает | Чей тариф проверяется | Зависимость |
 |---|---|---|---|
-| `team_management` (`MANAGER_PORTAL`) | Manager-portal целиком: команда, приглашения, кабинеты MP, WB Gateway | тариф **владельца организации** | `require_manager_portal` |
-| `search_tags` (`SEARCH_TAGS`) | Поисковые запросы WB (`/search-tags/*`), данные парсинга из ClickHouse | **личный** тариф пользователя, без привязки к org | `require_search_tags_feature` |
-| `browser_extension` (`BROWSER_EXTENSION`) | Браузерное расширение (`/extension/*`) | **личный** тариф пользователя | `require_browser_extension` |
+| `team_management` (`MANAGER_PORTAL`) | Manager-portal целиком: команда, приглашения, кабинеты MP, WB Gateway | тариф **владельца организации** (`grant_scope=org`) | `require_manager_portal` |
+| `search_tags` (`SEARCH_TAGS`) | Поисковые запросы WB (`/search-tags/*`), capability в расширении | личный тариф **или** seat от org владельца (`grant_scope=user_or_org_seat`) | `require_search_tags_feature` |
+| `browser_extension` (`BROWSER_EXTENSION`) | Браузерное расширение (`/extension/*`) | личный тариф **или** seat от org владельца (`grant_scope=user_or_org_seat`) | `require_browser_extension` |
+
+Seat-наследование: активный участник организации получает `user_or_org_seat` фичи
+с эффективного плана владельца этой org. При удалении / выходе участника
+(`DELETE .../members/{id}` / `DELETE .../members/me`) доступ пересчитывается на
+следующем запросе — отдельной лицензии расширения нет.
 
 ```python
 async def require_manager_portal(org_id: uuid.UUID, session: AsyncSession) -> None:
@@ -200,9 +205,12 @@ async def require_org_path_context(
 | `PATCH` | `/organizations/{org_id}` | Только владелец |
 | `DELETE` | `/organizations/{org_id}` | Только владелец |
 | `GET` | `/organizations/{org_id}/members` | Член org (требует фичу `team_management`) |
+| `DELETE` | `/organizations/{org_id}/members/me` | Участник (не владелец) — покинуть org; отзыв MP-грантов |
 | `DELETE` | `/organizations/{org_id}/members/{user_id}` | Только владелец |
 | `GET`/`POST`/`DELETE` | `/organizations/{org_id}/invitations` | Только владелец |
 | `GET` | `/invitations/preview/{token}` | Публично (по токену приглашения) |
+| `POST` | `/invitations/accept/{token}` | Auth: принять (email аккаунта = email приглашения) |
+| `POST` | `/invitations/accept-register/{token}` | Регистрация + accept; email берётся из invitation |
 | `POST`/`DELETE` | `/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}` | Только владелец |
 | `PUT` | `/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}/role` | Только владелец — назначить роль доступа MP |
 | `GET` | `/organizations/{org_id}/marketplace-accounts/{id}/access/{user_id}/effective` | Владелец / сам участник — effective ACL |
@@ -218,6 +226,10 @@ async def require_org_path_context(
 `roleId` роли доступа MP. Гранты применяются атомарно в момент
 `accept_invitation`/`accept_with_register`. Роль в grant должна совпадать с
 маркетплейсом кабинета; иначе при accept — ошибка валидации.
+
+Регистрация по приглашению (`accept-register`): email **всегда** из записи
+приглашения; клиентский email игнорируется (при несовпадении — 403). Это
+защита от подмены адреса при регистрации в org.
 
 ---
 

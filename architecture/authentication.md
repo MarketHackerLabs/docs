@@ -154,8 +154,12 @@ sequenceDiagram
 ## Доступ к браузерному расширению
 
 Фича тарифа `browser_extension` (по умолчанию на **pro** и **enterprise**) — мастер-гейт
-для клиента расширения. Login **не блокируется** при отсутствии фичи: пользователь может
-работать в manager-portal, но namespace `/extension/*` вернёт 403.
+для клиента расширения. Источник истины — `BillingService.user_has_feature` /
+`resolve_user_feature_keys`: личный план **или** seat от тарифа владельца org,
+где пользователь активный участник. То же для `search_tags` (capability расширения).
+
+Login **не блокируется** при отсутствии фичи: пользователь может работать в
+manager-portal, но namespace `/extension/*` вернёт 403.
 
 После login клиент запрашивает:
 
@@ -165,12 +169,24 @@ Authorization: Bearer <accessToken>
 ```
 
 Ответ агрегирует:
-- `features` — плоский список billing features пользователя (те же ключи, что в `billing_plans.features`);
+- `features` — эффективные billing features (личный ∪ org seat);
 - `capabilities` — подфичи расширения (`search_tags` и др. по мере добавления);
-- `subscription` — план, статус, `isInGracePeriod` (отмена, но период ещё не истёк).
+- `subscription` — **личный** план, статус, `isInGracePeriod` (отмена, но период ещё не истёк).
 
-WB Gateway и организации в entitlements **не входят** — это зона manager-portal; расширение
-получит их через отдельные API, когда интеграция понадобится.
+При удалении / выходе из org seat пропадает на следующем poll entitlements
+(или любом запросе `/extension/*`) — отзывать JWT не требуется.
+
+### Контракт для клиента расширения (внешний репозиторий)
+
+1. После login периодически вызывать `GET /extension/entitlements` (интервал —
+   `entitlementsPollIntervalSeconds` из `GET /extension/config`).
+2. При `403` — показать paywall / сообщение об отзыве корпоративной лицензии.
+3. Опционально: `externally_connectable` + ответ на `chrome.runtime.sendMessage`
+   `{ type: "mh.ping" }` — Manager Portal скрывает CTA «Установить расширение».
+4. Будущие in-extension баннеры — тот же `GET /promotions/active` с placement
+   вида `browser_extension.*` (см. [Продуктовые промо](./product-promotions.md)).
+
+WB Gateway и организации в entitlements **не входят** — это зона manager-portal.
 
 Статическая конфигурация клиента (без auth):
 
