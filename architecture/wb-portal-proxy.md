@@ -275,31 +275,51 @@ Auth-ключи в `local_storage` (`authorizev3`, `wb-eu-passport-v2.access-tok
 
 > Этот раздел описывает маршрутизацию для **уже подключённого** кабинета (path-префиксы в одном origin). Guided Connect использует ДРУГУЮ схему — поддомены 1-в-1 на реальные WB-хосты, см. [Guided Connect](#guided-connect).
 
-WB использует множество субдоменов. Каждый субдомен маппируется на фиксированный URL-префикс (`marketplace_accounts/domain/wb_hosts.py::WB_HOST_TO_PREFIX`):
+WB использует множество субдоменов. Маршрутизация — **конфигурационная**, без `if host == …`:
 
-| WB-субдомен | Прокси-префикс |
-|-------------|----------------|
-| `seller.wildberries.ru` (основной) | `/` (корень прокси) |
-| `seller-auth.wildberries.ru` | `/__auth__/` |
-| `seller-supply.wildberries.ru` | `/__supply__/` |
-| `seller-communications.wildberries.ru` | `/__comm__/` |
-| `seller-analytics.wildberries.ru` | `/__analytics__/` |
-| `seller-ads.wildberries.ru` | `/__ads__/` |
-| `suppliers-portal-api.wildberries.ru` | `/__portalapi__/` |
-| `passport.wildberries.ru` | `/__passport__/` |
-| ... и другие | см. `wb_hosts.py::WB_HOST_TO_PREFIX` (полный список — 20+ хостов) |
+1. **Канонический host → стабильный префикс** (`WB_HOST_TO_PREFIX`): `cmp.wildberries.ru` → `/__cmp__/`, `seller-ads.wildberries.ru` → `/__ads__/`, …
+2. **Aliases** (`WB_HOST_ALIASES_TO_PREFIX` + `WB_UPSTREAM_HOST_ALIASES`): `cmp.wb.ru` → тот же `__cmp__`, upstream = `cmp.wildberries.ru` (alias отдаёт 302 на канон).
+3. **Dynamic fallback**: любой proxyable `*.wildberries.ru` / `*.wb.ru` / … без записи в карте → `/{hostname}/path` (тот же контракт, что клиентский `rewriteUrl` в inject). Новый WB-сервис начинает работать без правок логики; для стабильного префикса и onboarding-label — одна строка в `WB_HOST_TO_PREFIX` (+ Caddy SAN для Guided Connect).
 
-Хосты аналитики/трекинга/CDN (`WB_STATIC_CDN_HOSTS`, `a.wb.ru`, `wbaaa.wb.ru`, `counter.yadro.ru`) не проксируются — браузер обращается к ним напрямую (`is_browser_direct_host`). `antibot.wildberries.ru` проксируется, но его JS-тело НЕ подвергается строковой заменой доменов (`WB_NO_JS_REWRITE_HOSTS`) — обфусцированный challenge-solver слишком чувствителен к правкам тела.
+| WB-субдомен | Прокси-префикс | Назначение |
+|-------------|----------------|------------|
+| `seller.wildberries.ru` | `/` | Основной кабинет продавца |
+| `seller-auth.wildberries.ru` | `/__auth__/` | SSO / логин |
+| `cmp.wildberries.ru` (`cmp.wb.ru` → alias) | `/__cmp__/` | ВБ.Продвижение / WB Media |
+| `seller-ads.wildberries.ru` | `/__ads__/` | Ads BFF |
+| `seller-supply.wildberries.ru` | `/__supply__/` | Поставки |
+| `seller-communications.wildberries.ru` | `/__comm__/` | Отзывы / чаты |
+| `seller-analytics.wildberries.ru` | `/__analytics__/` | Аналитика |
+| `suppliers-portal-api.wildberries.ru` | `/__portalapi__/` | Portal API |
+| `passport.wildberries.ru` | `/__passport__/` | Passport |
+| … | см. `wb_hosts.py::WB_HOST_TO_PREFIX` | |
+
+Хосты аналитики/трекинга/CDN (`WB_DIRECT_HOSTS`) и buyer/edu (`WB_EXTERNAL_HOSTS`: `www.wildberries.ru`, `pro-eng.wildberries.ru`, …) **не** переписываются в proxy URL. `antibot.wildberries.ru` проксируется, но JS-тело не подвергается строковой замене (`WB_NO_JS_REWRITE_HOSTS`).
+
+### Location / nested SSO `redirect_url`
+
+`encode_wb_url_to_proxy` переписывает не только абсолютный Location, но и query-параметры SSO (`redirect_url`, `returnUrl`, …). Иначе цепочка `cmp` → `seller-auth/?redirect_url=https://cmp.wildberries.ru/` уводила бы браузер с `wb-proxy` после логина.
+
+### Root-relative ассеты helper-SPA (`/lk-assets/…`)
+
+Отдельные приложения вроде CMP живут на своём origin и отдают HTML с **root-relative** путями (`<script src="/lk-assets/….js">`). За path-prefix `https://wb-proxy/__cmp__/` браузер резолвит их в `https://wb-proxy/lk-assets/…` (корень = seller) — бандл не тот / CSS 0 байт → **белый экран**. `<base href>` не помогает: path-absolute URL игнорируют base path.
+
+Поэтому при проксировании HTML/CSS с helper-хоста (`proxy_path_prefix_for_host` ≠ пусто) сервер делает `rewrite_root_relative_urls`: `/lk-assets/x` → `/__cmp__/lk-assets/x`. Клиентский `rewriteUrl` на страницах под `/__prefix__/` делает то же для fetch/XHR/динамических `<script>`.
+
+Отдельная проблема — React Router CMP с `basename: "/"` при реальном pathname `/__cmp__/`: маршруты не матчят → экран «Произошла ошибка». Как у Mandarin (`wb.mandarin-platform.ru/__cmp__/…`), сервер патчит JS helper-SPA (`rewrite_spa_basename`): `const Fm="/"` / `basename:"/"` → `basename: "/__cmp__"`. Pathname в адресной строке остаётся с префиксом; shim `Location.pathname` не нужен (и конфликтует с basename).
+
+Меню «ВБ.Продвижение» после rewrite открывает `/__cmp__/` в **новой вкладке** (`window.open`), seller остаётся открытым — тот же UX, что у Mandarin.
 
 ### Rewrite в `rewrite_body`
 
-Статические URL в HTML/JS переписываются при проксировании:
+Статические URL в HTML/JS/CSS переписываются универсальным regex (`rewrite_wb_urls_in_text`):
 ```
 https://seller.wildberries.ru → https://wb-proxy.markethacker.ru
-https://seller-auth.wildberries.ru → https://wb-proxy.markethacker.ru/__auth__
-//seller-supply.wildberries.ru/ → https://wb-proxy.markethacker.ru/__supply__/
+https://cmp.wildberries.ru → https://wb-proxy.markethacker.ru/__cmp__
+https://brand-new.wildberries.ru/x → https://wb-proxy.markethacker.ru/brand-new.wildberries.ru/x
 ```
 
+Единая сессия: vault cookies + `authorizev3` / `access-token` в LS инжектятся на **один** origin `wb-proxy` — отдельный SSO между «поддоменами» не нужен (в отличие от настоящего WB, где cookies `Domain=.wildberries.ru`).
 ---
 
 ## Default-deny ACL: `AccessPolicy`
