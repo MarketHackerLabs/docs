@@ -291,6 +291,15 @@ WB использует множество субдоменов. Каждый с
 
 Хосты аналитики/трекинга/CDN (`WB_STATIC_CDN_HOSTS`, `a.wb.ru`, `wbaaa.wb.ru`, `counter.yadro.ru`) не проксируются — браузер обращается к ним напрямую (`is_browser_direct_host`). `antibot.wildberries.ru` проксируется, но его JS-тело НЕ подвергается строковой заменой доменов (`WB_NO_JS_REWRITE_HOSTS`) — обфусцированный challenge-solver слишком чувствителен к правкам тела.
 
+### Клиентский inject: bootstrap + interceptor
+
+В HTML (перед первым `<script>` WB) попадает только:
+
+1. **Тонкий bootstrap** (`#mh-portal-auth`): `window.__MH_PROXY_CFG` (auth, host map, guard deny-lists, badge) + синхронная запись LS/cookies + отключение SW.
+2. **Один interceptor** — `<script src="/__proxy__/interceptor.<hash>.js">` (свой asset gateway, не upstream). Там URL-rewrite, `fetch`/`XHR`/`window.open`, UI-guard и badge.
+
+`/__proxy__/*` обрабатывается `GatewayService` до WB upstream (иммутабельный `Cache-Control`, ETag по хэшу файла). Произвольный JS из админки по-прежнему запрещён — только типизированный `portal_inject_config`.
+
 ### Rewrite в `rewrite_body`
 
 Статические URL в HTML/JS переписываются при проксировании:
