@@ -2,7 +2,7 @@
 
 Полное описание reverse-proxy к `seller.wildberries.ru`, реализованного в MarketHacker как два независимых модуля: **`wb_connect`** (первичная привязка кабинета — Guided Connect) и **`wb_gateway`** (проксирование уже подключённого кабинета).
 
-> Редизайн (2026): полностью заменяет прежний модуль `modules/proxy` (`portal_router`, `onboarding_subdomain_*`, opaque Redis-сессия `mh_portal_token`). Ключевые изменения — короткоживущая audience-scoped JWT-сессия с мгновенным Redis-отзывом вместо opaque-токена, единый default-deny `AccessPolicy` вместо частичных проверок, `MarketplaceCredentialVault` с optimistic-concurrency вместо append-лога credentials, явный `CabinetStatus` вместо разрозненных `is_active`/наличия credentials, строго типизированная (не JS) конфигурация инжекта.
+> Замена `modules/proxy` (2026): JWT-сессия `mh_gw_session` + Redis revoke, `AccessPolicy` default-deny, `MarketplaceCredentialVault`, явный `CabinetStatus`, типизированный inject-config.
 
 ---
 
@@ -43,8 +43,8 @@ team.markethacker.ru          wb-proxy.markethacker.ru       wb-connect.marketha
 
 Модули полностью разделены — разная маршрутизация, разная модель сессии, разные Caddy-домены:
 
-- **`wb_gateway`** (уже привязанный кабинет) — все WB-хосты свёрнуты в ОДИН origin (`wb-proxy.markethacker.ru`) через path-префиксы (`/__auth__/`, `/__supply__/` и т.д.), сессия — JWT в cookie `mh_gw_session`.
-- **`wb_connect`** (Guided Connect / привязка нового кабинета) — КАЖДЫЙ реальный WB-хост живёт на своём ПОДДОМЕНЕ домена `wb-connect.markethacker.ru`, маршрутизация по заголовку `Host`, сессия — opaque-токен в Redis + cookie `mh_wb_connect`. См. [Guided Connect](#guided-connect).
+- **`wb_gateway`** (уже привязанный кабинет) — WB-хосты в одном origin (`wb-proxy.markethacker.ru`) через path-префиксы (`/__auth__/`, `/__supply__/`…), сессия — JWT cookie `mh_gw_session`.
+- **`wb_connect`** (Guided Connect) — каждый WB-хост на своём поддомене `wb-connect.markethacker.ru`, маршрутизация по `Host`, opaque-токен в Redis + cookie `mh_wb_connect`. См. [Guided Connect](#guided-connect).
 
 | Компонент | Технология | Модуль | Описание |
 |-----------|------------|--------|----------|
@@ -119,14 +119,14 @@ sequenceDiagram
 
 Проверка (`GatewaySessionService.verify`) — две независимые проверки:
 1. Подпись + `exp` JWT (`jose.jwt.decode`).
-2. `SISMEMBER wb_gateway:account_sessions:{account_id} {jti}` в Redis — членство в множестве является ДОПОЛНИТЕЛЬНЫМ условием поверх `exp`.
-3. **Sliding renewal:** при успешной активности (прокси-запрос), когда до `exp` осталось меньше половины TTL, gateway выпускает новый JWT и ставит обновлённый `Set-Cookie: mh_gw_session` — кабинет не «отваливается» ровно через 30 минут при живой вкладке.
+2. `SISMEMBER wb_gateway:account_sessions:{account_id} {jti}` в Redis (дополнительно к `exp`).
+3. **Sliding renewal:** при активности, если до `exp` меньше половины TTL — новый JWT + `Set-Cookie`.
 
-**Мгновенный отзыв (`revoke_all_sessions_for_account`)** — одна атомарная `DEL` над Redis SET, O(1) независимо от числа активных вкладок/устройств. Вызывается при: повторном Guided Connect, удалении кабинета, отзыве прав пользователя владельцем, переводе кабинета в `revoked`/`expired`. Раньше (`proxy_sessions.revoke_all_sessions_for_account`) использовался `SCAN` по всему keyspace Redis — не масштабировался и блокировал event loop Redis на время сканирования.
+**Отзыв (`revoke_all_sessions_for_account`)** — атомарный `DEL` Redis SET. Вызывается при повторном Guided Connect, удалении кабинета, отзыве прав, статусе `revoked`/`expired`.
 
 ### CSRF-защита `mh_gw_session`
 
-Cookie `SameSite=None` означает, что браузер приложит её к запросу с ЛЮБОГО origin, включая посторонний вредоносный сайт. `assert_gateway_csrf_origin` (`wb_gateway/domain/csrf_origin.py`) сверяет `Origin`/`Referer` мутирующих запросов (не GET/HEAD/OPTIONS) с:
+При `SameSite=None` cookie уходит на любой origin. `assert_gateway_csrf_origin` сверяет `Origin`/`Referer` мутирующих запросов с:
 
 - `Settings.wb_gateway_origin` — fetch/XHR из вкладки кабинета на wb-proxy;
 - `chrome-extension://<id>` из `CORS_ORIGINS` / runtime platform settings — запросы из browser extension (Origin этого типа нельзя подделать с обычных сайтов).
@@ -144,7 +144,7 @@ Browser extension не может полагаться на httpOnly-cookie `mh_
 
 ## Guided Connect
 
-Владелец привязывает кабинет **без DevTools**: popup с логином WB через onboarding-прокси на **поддоменах** — каждый реальный WB-хост проксируется через СВОЙ поддомен домена `wb-connect.markethacker.ru`, а не через path-префикс единого origin (как в `wb_gateway`). Браузер тогда нативно изолирует cookies/localStorage по origin и корректно резолвит root-relative пути ровно так же, как на настоящем WB — сервер ничего не подставляет и не угадывает, а лишь пассивно перехватывает нужные данные.
+Владелец привязывает кабинет через popup: каждый WB-хост — на своём поддомене `wb-connect.markethacker.ru` (не path-prefix как в `wb_gateway`). Браузер изолирует cookies/LS по origin; сервер пассивно capture'ит сессию.
 
 ```mermaid
 sequenceDiagram
@@ -199,7 +199,7 @@ sequenceDiagram
 
 **CORS между onboarding-поддоменами:** реальный WB — набор независимых поддоменов, обращающихся друг к другу через CORS с `credentials: include` (например `seller-auth.` → `seller-services.` для публичных справочников типа кода стран). Прокси воспроизводит эту топологию поддоменами `wb-connect.markethacker.ru`, поэтому браузер требует preflight + `Access-Control-Allow-*`. `WbConnectOnboardingMiddleware` отвечает на `OPTIONS` сам (без проксирования на WB и без connect-token guard — preflight принципиально идёт без cookie) и добавляет `Access-Control-Allow-Origin`/`Access-Control-Allow-Credentials` ко всем ответам, если `Origin` запроса принадлежит `wb_onboarding_root_host`. Инжектируемый rewriter-скрипт (`build_onboarding_subdomain_rewriter_script`) дополнительно форсирует `credentials: 'include'` / `xhr.withCredentials = true` для fetch/XHR к onboarding-поддоменам.
 
-Публичный эндпоинт `POST /wb-connect/capture/{token}` также принимает CORS-запросы от РЕАЛЬНОГО `seller.wildberries.ru` (не только от `wb_onboarding_root_host`) — это нужно для fallback-сниппета, вставляемого вручную в DevTools Console на настоящем сайте WB. `_capture_cors_origin` никогда не отражает произвольный `Origin` (в отличие от старой реализации с `CORS: *`) — допускаются только `WB_MAIN_HOST` и `wb_onboarding_root_host`(+поддомены).
+Публичный `POST /wb-connect/capture/{token}` принимает CORS от `seller.wildberries.ru` (fallback DevTools-сниппет) и от `wb_onboarding_root_host`(+поддомены). Произвольный `Origin` не отражается.
 
 **Manager-portal:** компонент `WbConnectModal` — popup без `noopener` (для `postMessage`), poll `credentials-status`, ручной сниппет в collapsible «DevTools» (fallback).
 
@@ -313,7 +313,7 @@ https://seller-auth.wildberries.ru → https://wb-proxy.markethacker.ru/__auth__
 
 ## Default-deny ACL: `AccessPolicy`
 
-Единая точка проверки прав для каждого проксируемого запроса (`wb_gateway/domain/access_policy.py`) — заменяет старую модель, где проверка была только для известных `/ns/*` префиксов, а всё остальное (неизвестные `/ns/*`, любые WB-субдомены helper-хостов) проходило БЕЗ проверки вообще.
+ACL на каждый проксируемый запрос (`wb_gateway/domain/access_policy.py`): default-deny для `/ns/*` вне каталога.
 
 - Пути **вне** `/ns/*` (статика SPA, ассеты) разрешены всем менеджерам с активным кабинетом — не содержат бизнес-данных.
 - Пути `/ns/*` резолвятся через каталог `WB_PORTAL_ROUTES` (first-match по самому длинному префиксу) в `section_key`.
@@ -386,7 +386,7 @@ document.cookie = "WBTokenV3=" + token + "; path=/; max-age=86400; SameSite=Lax"
 
 Конфигурация хранится в `platform_settings.wb_portal_inject` (`portal_inject_config.py`) и редактируется в **Админ-панель → Team → Инжект WB**.
 
-> **Редизайн безопасности:** раньше админ мог выбрать режим `override`/`append` и вставить ПРОИЗВОЛЬНЫЙ JavaScript, который затем выполнялся в контексте прокси для КАЖДОГО менеджера КАЖДОЙ организации на платформе — компрометация одной учётной записи суперадмина превращалась в возможность внедрить произвольный код на десятки организаций одновременно. Новая конфигурация — это ТОЛЬКО данные, ни одно поле не интерпретируется как исполняемый код.
+Конфиг — только данные (текст, цвет, списки id); поля не исполняются как JS.
 
 | Поле | Тип | Валидация |
 |---|---|---|
