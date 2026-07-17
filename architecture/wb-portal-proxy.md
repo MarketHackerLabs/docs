@@ -126,12 +126,12 @@ sequenceDiagram
 
 ### CSRF-защита `mh_gw_session`
 
-Cookie `SameSite=None` означает, что браузер приложит её к запросу с ЛЮБОГО origin, включая посторонний вредоносный сайт. `assert_gateway_csrf_origin` (`wb_gateway/domain/csrf_origin.py`) сверяет `Origin`/`Referer` мутирующих запросов (не GET/HEAD/OPTIONS) с:
+Cookie `SameSite=None` означает, что браузер приложит её к запросу с ЛЮБОГО origin, включая посторонний вредоносный сайт. `is_allowed_gateway_csrf_origin` (`wb_gateway/domain/csrf_origin.py`) сверяет `Origin`/`Referer` мутирующих запросов (не GET/HEAD/OPTIONS) с:
 
 - `Settings.wb_gateway_origin` — fetch/XHR из вкладки кабинета на wb-proxy;
-- `chrome-extension://<id>` из `CORS_ORIGINS` / runtime platform settings — запросы из browser extension (Origin этого типа нельзя подделать с обычных сайтов).
+- `chrome-extension://<id>` / `moz-extension://<id>` из `CORS_ORIGINS`, runtime platform settings и/или `WB_GATEWAY_TRUSTED_EXTENSION_ORIGINS` — запросы из browser extension (Origin этого типа нельзя подделать с обычных сайтов).
 
-`https://team.markethacker.ru` и прочие HTTPS-origin из CORS **намеренно не** whitelisted здесь — иначе CSRF с cookie из manager-portal.
+`https://team.markethacker.ru` и прочие HTTPS-origin из CORS **не** whitelisted здесь — иначе CSRF с cookie из manager-portal.
 
 ### Аутентификация extension к wb-proxy
 
@@ -482,10 +482,12 @@ seller-auth.wb-connect.markethacker.ru,
 ### CORS
 
 ```env
-CORS_ORIGINS=["https://team.markethacker.ru","https://admin.markethacker.ru"]
+CORS_ORIGINS=["https://team.markethacker.ru","https://admin.markethacker.ru","chrome-extension://<extension_id>"]
+# Опционально — только CSRF wb-gateway:
+# WB_GATEWAY_TRUSTED_EXTENSION_ORIGINS=["chrome-extension://<other_id>"]
 ```
 
-`wb-proxy.markethacker.ru`/`wb-connect.markethacker.ru` НЕ добавляются в общий `CORS_ORIGINS` — их кросс-доменные сценарии (guided connect onboarding CORS, gateway CSRF-проверка) обрабатываются отдельными, более узкими механизмами (`_onboarding_cors_headers`, `_capture_cors_origin`, `_assert_same_origin_for_state_changing_request`), а не общим CORS middleware API.
+`wb-proxy.markethacker.ru`/`wb-connect.markethacker.ru` НЕ добавляются в общий `CORS_ORIGINS` — их кросс-доменные сценарии (guided connect onboarding CORS, gateway CSRF) обрабатываются отдельными механизмами (`_onboarding_cors_headers`, `_capture_cors_origin`, `is_allowed_gateway_csrf_origin`), а не общим CORS middleware API. В CSRF allowlist из `CORS_ORIGINS` попадают только `chrome-extension://` / `moz-extension://`.
 
 ---
 

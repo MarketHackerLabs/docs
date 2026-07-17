@@ -224,7 +224,7 @@ await fetch(
 );
 ```
 
-CSRF: для POST/PUT/PATCH/DELETE браузер extension автоматически шлёт `Origin: chrome-extension://<id>` — этот origin должен быть в `CORS_ORIGINS`. Upstream-авторизация WB (authorizev3, cookies) подставляется сервером; extension не хранит и не передаёт секреты WB.
+CSRF: для POST/PUT/PATCH/DELETE браузер extension автоматически шлёт `Origin: chrome-extension://<id>` — этот origin должен быть в `CORS_ORIGINS` и/или `WB_GATEWAY_TRUSTED_EXTENSION_ORIGINS`. Upstream-авторизация WB (authorizev3, cookies) подставляется сервером; extension не хранит и не передаёт секреты WB.
 
 Подробнее: [WB Portal Proxy](./wb-portal-proxy.md#аутентификация-extension-к-wb-proxy).
 

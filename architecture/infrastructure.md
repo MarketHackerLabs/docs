@@ -236,7 +236,8 @@ JWT_REFRESH_TTL_DAYS=30
 ENCRYPTION_KEY=change-me-32-bytes-key-here!!!!
 ENVIRONMENT=production
 LOG_LEVEL=INFO
-CORS_ORIGINS=["https://team.markethacker.ru","https://admin.markethacker.ru"]
+CORS_ORIGINS=["https://team.markethacker.ru","https://admin.markethacker.ru","chrome-extension://<extension_id>"]
+# WB_GATEWAY_TRUSTED_EXTENSION_ORIGINS=["chrome-extension://<extension_id>"]
 
 # WB Gateway + WB Connect (production)
 WB_PORTAL_PUBLIC_BASE_URL=https://wb-proxy.markethacker.ru

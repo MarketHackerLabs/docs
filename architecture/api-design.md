@@ -87,7 +87,7 @@
 | DELETE | `/api/v1/wb-gateway/session` | cookie | Logout — отзыв текущей gateway-сессии |
 | ANY | `/api/v1/wb-gateway/*` | cookie **или** `Authorization: Bearer <gatewaySessionToken>` | Reverse proxy к seller.wildberries.ru (default-deny ACL) |
 
-> **Browser extension:** после `handshake` сохраните `gatewaySessionToken` и вызывайте WB API через `https://wb-proxy.markethacker.ru/__content__/ns/...` с заголовком `Authorization: Bearer <gatewaySessionToken>` и `Origin: chrome-extension://<id>` (id должен быть в `CORS_ORIGINS`). Upstream-заголовки и cookies WB подставляет сервер из vault — extension не передаёт секреты WB.
+> **Browser extension:** после `handshake` сохраните `gatewaySessionToken` и вызывайте WB API через `https://wb-proxy.markethacker.ru/__content__/ns/...` с заголовком `Authorization: Bearer <gatewaySessionToken>` и `Origin: chrome-extension://<id>` (id в `CORS_ORIGINS` и/или `WB_GATEWAY_TRUSTED_EXTENSION_ORIGINS`). Upstream-заголовки и cookies WB подставляет сервер из vault — extension не передаёт секреты WB.
 
 ### WB Connect (Guided Connect — привязка кабинета)
 
