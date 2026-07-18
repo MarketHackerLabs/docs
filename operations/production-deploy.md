@@ -33,7 +33,9 @@
 | manager-portal | manager-portal | `127.0.0.1:3002` |
 | market-navigators | market-navigators | `127.0.0.1:3003` |
 | caddy | caddy (host network) | `:80`, `:443` |
-| monitoring | prometheus, grafana, node-exporter, cadvisor, blackbox | `127.0.0.1:9090/3000/9100/8081/9115` |
+| monitoring | prometheus, grafana, alertmanager, node-exporter, cadvisor, blackbox, pg/redis/kafka exporters | `127.0.0.1:9090/3000/9093/9100/8081/9115` + exporters `9187–9308` |
+| parser ClickHouse metrics | (в parser infra) | `127.0.0.1:9363` |
+| backend/parser workers metrics | (в prod compose) | `127.0.0.1:9101` / `9102` |
 
 **Не деплоится на VPS:** `docs`, `extension-chrome` (Chrome Web Store).
 
@@ -468,7 +470,15 @@ METRICS_HASH=<bcrypt>
 ```bash
 cd /opt/markethacker/monitoring
 cp .env.example .env
+# Обязательно:
 GRAFANA_ADMIN_PASSWORD=<strong>
+BACKEND_PG_DSN=postgresql://…@postgres:5432/markethacker?sslmode=disable
+PARSER_PG_DSN=postgresql://…@postgres:5432/markethacker_parser?sslmode=disable
+BACKEND_REDIS_PASSWORD=…
+PARSER_REDIS_PASSWORD=…
+# Telegram (Alertmanager). РФ: см. TELEGRAM_API_URL / ALERTMANAGER_HTTP_PROXY в .env.example
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
 ```
 
 ---
@@ -548,6 +558,8 @@ curl -fsSI https://team.markethacker.ru/login | head
 
 ### 9.6. Monitoring
 
+Нужны сети `markethacker_backend_infra` / `markethacker_parser_infra` (exporters) и поднятые backend/parser.
+
 ```bash
 cd /opt/markethacker/monitoring
 make up
@@ -555,7 +567,9 @@ make health
 ```
 
 Откройте `https://grafana.markethacker.ru` (логин из `.env`).  
-Prometheus UI только локально: `ssh -L 9090:127.0.0.1:9090 ubuntu@vps` → http://127.0.0.1:9090.
+Дашборды: Overview, Backend, Parser, Workers, Docker, Infra, Availability, PostgreSQL, Redis, ClickHouse, Kafka, Business.  
+Prometheus UI: `ssh -L 9090:127.0.0.1:9090 ubuntu@vps` → http://127.0.0.1:9090.  
+Alertmanager: `ssh -L 9093:127.0.0.1:9093 …`.
 
 ### 9.7. Первый суперпользователь
 
@@ -702,7 +716,10 @@ FULL_IMAGE=markethacker-api:PREV docker compose -f docker-compose.prod.yml up -d
 - [ ] Логин в admin-panel (superuser)
 - [ ] Логин в manager-portal
 - [ ] Webhook ЮKassa/Stripe указывают на `https://api.markethacker.ru/api/v1/billing/webhooks/...`
-- [ ] Grafana: targets UP, dashboard Overview
+- [ ] Grafana: Overview + Backend/Workers/Postgres targets UP
+- [ ] Alertmanager: test alert → Telegram (или proxy/Bot API)
+- Worker metrics: `curl -fsS http://127.0.0.1:9101/metrics | head` / `:9102`
+- ClickHouse metrics: `curl -fsS http://127.0.0.1:9363/metrics | head`
 - [ ] `make backup` отрабатывает без ошибок
 - [ ] fail2ban / ufw активны
 - [ ] Root SSH login отключён
