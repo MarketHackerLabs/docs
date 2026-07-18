@@ -13,7 +13,14 @@ MarketHacker — платформа для управления продажам
 | [admin-panel](https://github.com/MarketHackerLabs/admin-panel) | Панель администратора (Next.js, `admin.markethacker.ru`) |
 | [manager-portal](https://github.com/MarketHackerLabs/manager-portal) | Портал менеджеров (Next.js, `team.markethacker.ru`) |
 | [parser](https://github.com/MarketHackerLabs/parser) | Платформа фоновых задач (Python, FastAPI, ARQ) |
+| [caddy](https://github.com/MarketHackerLabs/caddy) | Reverse proxy + TLS |
+| [infra](https://github.com/MarketHackerLabs/infra) | Docker-сети, backup-скрипты |
+| [monitoring](https://github.com/MarketHackerLabs/monitoring) | Prometheus + Grafana |
 | **docs** (этот репозиторий) | Архитектура, спецификации, руководства |
+
+## Операции
+
+- [Production-деплой на чистый VPS](./operations/production-deploy.md) — полное руководство (Ubuntu 24.04, VK Cloud)
 
 ## Содержание
 

@@ -170,14 +170,22 @@ Docker-сети (межсервисное):
 
 ### Порядок деплоя на VPS
 
+Полная инструкция: [Production-деплой](../operations/production-deploy.md).
+
+Краткий порядок:
+
 ```bash
-cd infra && make networks
-cd backend && make infra-up-prod && make prod-migrate && make prod-up
-cd parser && make infra-up-prod && make prod-migrate && make prod-up
-cd admin-panel && docker compose -f docker-compose.prod.yml up -d
-cd manager-portal && docker compose -f docker-compose.prod.yml up -d
-cd caddy && make up
+cd /opt/markethacker/infra && make networks
+cd ../backend && make infra-up-prod && make prod-migrate && make prod-up
+cd ../parser && make infra-up-prod && make prod-migrate && make prod-up
+cd ../admin-panel && make prod-up
+cd ../manager-portal && make prod-up
+cd ../market-navigators && docker compose -f docker-compose.prod.yml up -d --build
+cd ../caddy && make up
+cd ../monitoring && make up
 ```
+
+Канонические пути: `/opt/markethacker/{infra,backend,parser,admin-panel,manager-portal,market-navigators,caddy,monitoring,backups}`.
 
 ### Компоненты
 
@@ -210,9 +218,10 @@ cd caddy && make up
 
 | Инструмент | Назначение |
 |------------|------------|
-| Prometheus + Grafana | Метрики API, workers |
-| Sentry | Error tracking |
-| Uptime monitoring | Внешняя проверка `/health` |
+| Prometheus + Grafana + exporters | Репозиторий [monitoring](https://github.com/MarketHackerLabs/monitoring), UI `grafana.markethacker.ru` |
+| Sentry | Error tracking (опционально через `SENTRY_DSN`) |
+| Blackbox exporter | HTTPS probe публичных URL |
+| Uptime (внешний) | Рекомендуется дополнительно к blackbox |
 
 ## Масштабирование (будущее)
 
