@@ -73,7 +73,9 @@ file: <файл>
 ```
 
 jpeg/png/webp/gif, до 10 МБ → затем сообщение с `attachmentIds`.  
-URL: `GET /support/attachments/{id}/url`.
+URL: `GET /support/attachments/{id}/url` → для local storage вернёт `requiresAuth: true`  
+и абсолютный `url` на `/content`; клиент должен скачать с `Authorization: Bearer`  
+(в UI — blob URL). S3 — signed URL без auth.
 
 ---
 
