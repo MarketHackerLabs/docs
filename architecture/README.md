@@ -113,4 +113,6 @@ flowchart TB
 | [Parser Service](./parser.md) | Платформа фоновых задач, Kafka → ClickHouse |
 | [Разработка парсеров](./parser-development.md) | Новые парсеры, включение Kafka |
 | [Инфраструктура](./infrastructure.md) | Docker, CI/CD, production |
+| [Support Chat](./support-chat.md) | Чат поддержки (один тред на пользователя, Admin + Portal + TG) |
+| [Клиент Support](../integrations/support-client.md) | Как подключить расширение / приложение |
 | [Дорожная карта](./roadmap.md) | Этапы реализации |

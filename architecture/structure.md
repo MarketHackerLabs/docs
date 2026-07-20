@@ -87,6 +87,7 @@ flowchart BT
 | `partners` | Партнёрская программа: кампании, атрибуция, комиссии |
 | `extension` | Entitlements и remote config браузерного расширения |
 | `admin` | Админ-панель, управление тарифами и парсером |
+| `support` | Чат поддержки (REST, WebSocket, Telegram) |
 | `wb_connect` | Guided Connect — первичная привязка кабинета WB (onboarding subdomain-прокси) |
 | `wb_gateway` | Reverse proxy к seller.wildberries.ru для уже подключённых кабинетов |
 
