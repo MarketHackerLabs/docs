@@ -104,7 +104,8 @@ Webhook: `POST /support/channels/telegram/webhook`.
 
 ## Хранилище вложений
 
-S3-совместимое (`SUPPORT_S3_*`) или локальный путь (`SUPPORT_LOCAL_STORAGE_PATH`).
+S3-совместимое (`SUPPORT_S3_*`) или локальный путь (`SUPPORT_LOCAL_STORAGE_PATH`).  
+В production без S3: named volume `markethacker_support_attachments` → `/app/data/support-attachments` (`docker-compose.prod.yml`).
 
 ---
 

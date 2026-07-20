@@ -599,7 +599,8 @@ docker compose -f docker-compose.prod.yml run --rm api \
 
 ### Хранение
 
-Docker named volumes (`pgdata`, `redisdata`, `clickhousedata`, `kafkadata`, `caddy_data`, `prometheus_data`, `grafana_data`).  
+Docker named volumes (`pgdata`, `redisdata`, `clickhousedata`, `kafkadata`, `caddy_data`, `prometheus_data`, `grafana_data`, `markethacker_support_attachments`).  
+Вложения чата поддержки живут в `markethacker_support_attachments` (пока не настроен `SUPPORT_S3_*`).  
 Список: `docker volume ls | grep markethacker`.
 
 ### Backup
@@ -715,6 +716,7 @@ FULL_IMAGE=markethacker-api:PREV docker compose -f docker-compose.prod.yml up -d
 - [ ] `make prod-check-parser`
 - [ ] Логин в admin-panel (superuser)
 - [ ] Логин в manager-portal
+- [ ] Volume `markethacker_support_attachments` есть (`docker volume ls | grep support`) — если без S3
 - [ ] Webhook ЮKassa/Stripe указывают на `https://api.markethacker.ru/api/v1/billing/webhooks/...`
 - [ ] Grafana: Overview + Backend/Workers/Postgres targets UP
 - [ ] Alertmanager: test alert → Telegram (или proxy/Bot API)
