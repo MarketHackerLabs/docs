@@ -61,8 +61,9 @@ flowchart TB
 
 ```
 modules/search_tags/infrastructure/clickhouse/queries/
-├── list_search_queries.py       # @cached_read на fetch(), TTL 30 мин
-└── get_latest_monthly_by_query.py  # @cached_read на fetch(), TTL 15 мин
+├── list_search_queries.py              # @cached_read на fetch(), TTL 30 мин
+├── get_monthly_analytics_by_query.py   # @cached_read на fetch(), TTL 15 мин
+└── get_frequency_trends_by_query.py    # @cached_read на fetch(), TTL 15 мин
 
 modules/admin/infrastructure/clickhouse/queries/
 └── list_parser_wb_search_tags.py   # @cached_read на fetch(), TTL 20 мин

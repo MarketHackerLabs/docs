@@ -121,7 +121,8 @@ modules/search_tags/infrastructure/clickhouse/
 ├── mappers.py
 └── queries/
     ├── list_search_queries.py          # Query.execute() + @cached_read fetch()
-    └── get_latest_monthly_by_query.py
+    ├── get_monthly_analytics_by_query.py
+    └── get_frequency_trends_by_query.py
 
 modules/admin/infrastructure/clickhouse/
 ├── models.py

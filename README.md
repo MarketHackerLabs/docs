@@ -58,7 +58,7 @@ MarketHacker — платформа для управления продажам
 - **WB Connect (Guided Connect)** — развёрнут на `wb-connect.markethacker.ru` + onboarding-поддомены: привязка WB-сессии через popup без DevTools; HttpOnly cookies накапливаются server-side
 - **Manager Portal** — `team.markethacker.ru`: кабинеты, команда, приглашения, section grants, биллинг, `WbConnectModal`
 - **Биллинг** — ЮKassa (RUB) + Stripe, webhook, фоновая сверка платежей, автопродление
-- **Search Tags API** — `GET /api/v1/search-tags/queries` и `/queries/monthly`: read-only данные парсера WB из ClickHouse, фича `search_tags`
+- **Search Tags API** — `GET /api/v1/search-tags/queries`, `/queries/monthly`, `/queries/frequency-trends`: read-only данные парсера WB из ClickHouse, фича `search_tags`
 - **JSON camelCase** — все REST request/response bodies в camelCase (`CamelModel`); query-параметры URL — snake_case
 - **Parser: market niche** — парсер `wb_market_niche` (отчёт «Анализ ниш»): ZIP/XLSX → Kafka → `wb_market_niche` в ClickHouse; API parser-сервиса `POST /api/v1/jobs/wb-market-niche`
 - **Кэширование** — Redis response cache для read-only данных (ClickHouse, каталоги PG), декоратор `@cached_read`

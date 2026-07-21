@@ -249,12 +249,40 @@ const hasExtension = planHasFeature(me?.session.planFeatures, PLAN_FEATURE_BROWS
 |-------|------|:----:|------------|----------|
 | GET | `/api/v1/search-tags/queries` | ✓ | фича `search_tags` | Постраничный список запросов с частотой |
 | GET | `/api/v1/search-tags/queries/monthly` | ✓ | фича `search_tags` | Monthly-аналитика по точному query |
+| GET | `/api/v1/search-tags/queries/frequency-trends` | ✓ | фича `search_tags` | Тренды частотности по точному query |
 
 **Query-параметры списка:** `interval`, `since`, `until`, `query` (подстрока), `page`, `limit`.
 
 **Monthly-ответ:** метрики с `MetricDelta` (`value`, `previous`, `diff`, `diffPercent`) — `frequency`, `ctr`, конверсии, `orders`, `avgFrequency`, `subjectsWithOrders`, `topOrderSubject`. CTR = `openToCard` / `frequency` × 100.
 
-Источник: таблица `wb_search_tags` (+ join `wb_subjects_dict` для названия предмета). Кэш: `@cached_read` (TTL 30 / 15 мин). См. [Кэширование](./caching.md), [Parser Service](./parser.md).
+**Frequency-trends:** `query` (обязательный), `series` (`days_30` по умолчанию | `months_12`). Ответ: `yesterday`, `latestMonth.frequency` (`MetricDelta` из WB `frequency`/`frequency_prev`), dense `points` (`frequency: null` на пропуски), `granularity` = `day`|`month`. Без данных по query — `404` (`NOT_FOUND`), как у monthly. Значения только из готовых агрегатов WB (`interval=yesterday` / `month`), без суммирования дневных в месячные.
+
+Пример:
+
+```http
+GET /api/v1/search-tags/queries/frequency-trends?query=кроссовки&series=days_30
+```
+
+```json
+{
+  "query": "кроссовки",
+  "series": "days_30",
+  "granularity": "day",
+  "yesterday": { "periodStart": "2026-07-20", "frequency": 4210 },
+  "latestMonth": {
+    "periodStart": "2026-06-01",
+    "periodEnd": "2026-06-30",
+    "parsedAt": "2026-07-01T09:00:00Z",
+    "frequency": { "value": 118782, "previous": 113660, "diff": 5122, "diffPercent": 4.51 }
+  },
+  "points": [
+    { "periodStart": "2026-06-21", "frequency": null },
+    { "periodStart": "2026-07-20", "frequency": 4210 }
+  ]
+}
+```
+
+Источник: таблица `wb_search_tags` (+ join `wb_subjects_dict` для названия предмета в monthly). Кэш: `@cached_read` (TTL 30 / 15 мин; trends — 15 мин). См. [Кэширование](./caching.md), [Parser Service](./parser.md).
 
 ### Admin — Parser / ClickHouse
 

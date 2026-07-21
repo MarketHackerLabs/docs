@@ -112,7 +112,7 @@ deny-by-default — фактические возможности участни
 | Фича (значение в БД) | Что открывает | Чей тариф проверяется | Зависимость |
 |---|---|---|---|
 | `team_management` (`MANAGER_PORTAL`) | Manager-portal целиком: команда, приглашения, кабинеты MP, WB Gateway | тариф **владельца организации** (`grant_scope=org`) | `require_manager_portal` |
-| `search_tags` (`SEARCH_TAGS`) | Поисковые запросы WB (`/search-tags/*`), capability в расширении | личный тариф **или** seat от org владельца (`grant_scope=user_or_org_seat`) | `require_search_tags_feature` |
+| `search_tags` (`SEARCH_TAGS`) | Поисковые запросы WB (`/search-tags/queries`, `/monthly`, `/frequency-trends`), capability в расширении | личный тариф **или** seat от org владельца (`grant_scope=user_or_org_seat`) | `require_search_tags_feature` |
 | `browser_extension` (`BROWSER_EXTENSION`) | Браузерное расширение (`/extension/*`) | личный тариф **или** seat от org владельца (`grant_scope=user_or_org_seat`) | `require_browser_extension` |
 
 Seat-наследование: активный участник организации получает `user_or_org_seat` фичи
