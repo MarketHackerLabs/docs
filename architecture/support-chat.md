@@ -29,7 +29,7 @@ clients → FastAPI modules/support (REST + WS + Telegram webhook)
 
 Код: `SupportService` + `SupportAccess` + `SupportRepository` + `SupportRealtimeBroker`.
 
-Миграции: `20260720_0030` (схема), `0031` (без org), `0032` (один чат на customer).
+Миграции: `20260720_0030` (схема), `0031` (без org), `0032` (один чат на customer), `0033` (индекс тегов для фильтра).
 
 ---
 
@@ -83,7 +83,10 @@ WS: `/api/v1/support/ws?access_token=…`
 - `/support/staff` — гранты (модалка), удаление
 - `/support/settings` — Telegram (токен в env)
 
-Фильтр «Мои чаты» → `assignee=me`.
+Фильтр «Мои чаты» → `assignee=me`.  
+Фильтр по тегам → `tag_id=<uuid>` (повтор параметра для нескольких; OR — чат с любым из выбранных). Совместим с `status` / `assignee` / `q` / `priority` / `source`.
+
+Индекс: `ix_support_conv_tags_tag_id` на `support_conversation_tags(tag_id)`.
 
 ---
 
@@ -114,6 +117,7 @@ S3-совместимое (`SUPPORT_S3_*`) или локальный путь (`
 - `support_conversations (customer_user_id)` unique  
 - `support_conversations (assignee_id, status, last_message_at)`  
 - `support_messages (conversation_id, created_at, id)`
+- `support_conversation_tags (tag_id)` — фильтр инбокса по тегам
 
 ---
 
