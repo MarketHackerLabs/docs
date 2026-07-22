@@ -34,6 +34,7 @@ MarketHacker — платформа для управления продажам
 - [Доступ к кабинетам MP](./architecture/marketplace-access-model.md) — section permissions, WB Gateway
 - [WB Gateway & Guided Connect](./architecture/wb-portal-proxy.md) — reverse proxy к seller.wildberries.ru, Guided Connect, JS-инжект
 - [Аутентификация и авторизация](./architecture/authentication.md)
+- [Клиент Auth + MFA](./integrations/auth-mfa-client.md) — контракт для extension / portal / admin
 - [Безопасность](./architecture/security.md)
 - [Дизайн API](./architecture/api-design.md)
 - [Кэширование](./architecture/caching.md) — Redis response cache, `@cached_read`, инвалидация

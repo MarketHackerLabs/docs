@@ -115,4 +115,5 @@ flowchart TB
 | [Инфраструктура](./infrastructure.md) | Docker, CI/CD, production |
 | [Support Chat](./support-chat.md) | Чат поддержки (один тред на пользователя, Admin + Portal + TG) |
 | [Клиент Support](../integrations/support-client.md) | Как подключить расширение / приложение |
+| [Клиент Auth + MFA](../integrations/auth-mfa-client.md) | Login MFA challenge / complete для клиентов |
 | [Дорожная карта](./roadmap.md) | Этапы реализации |

@@ -19,7 +19,11 @@ sequenceDiagram
 
     EXT->>API: POST /auth/login (email, password)
     API->>AUTH: verify credentials
-    AUTH->>PG: check user + MFA
+    alt MFA enabled
+        AUTH-->>EXT: 403 MFA_REQUIRED + mfaToken
+        EXT->>API: POST /auth/mfa/complete (mfaToken, code)
+        API->>AUTH: verify TOTP
+    end
     AUTH->>PG: store refresh token (family_id, device_id)
     AUTH-->>EXT: accessToken (15m) + refreshToken (30d)
 
@@ -106,11 +110,12 @@ URL (см. [Контроль доступа](./access-control.md)). `is_superadm
 | Метод | Путь | Описание |
 |-------|------|----------|
 | POST | `/api/v1/auth/register` | Регистрация (+ опционально создание org, где регистрирующийся становится `owner_id`) |
-| POST | `/api/v1/auth/login` | Вход, выдача токенов |
+| POST | `/api/v1/auth/login` | Вход; при MFA — 403 `MFA_REQUIRED` или токены |
+| POST | `/api/v1/auth/mfa/complete` | Завершение входа: challenge + TOTP → токены |
 | POST | `/api/v1/auth/refresh` | Обновление access token |
-| POST | `/api/v1/auth/logout` | Отзыв refresh token |
-| POST | `/api/v1/auth/mfa/setup` | Настройка TOTP |
-| POST | `/api/v1/auth/mfa/verify` | Подтверждение MFA при login |
+| POST | `/api/v1/auth/logout` | Отзыв refresh (+ опционально access `jti`) |
+| POST | `/api/v1/auth/mfa/setup` | Настройка TOTP (Bearer) |
+| POST | `/api/v1/auth/mfa/verify` | Подтверждение кода и включение MFA (Bearer) |
 
 Эндпоинтов "переключения" организации/кабинета намеренно нет — токен не
 завязан на конкретную организацию, а список организаций пользователь получает
@@ -118,9 +123,32 @@ URL (см. [Контроль доступа](./access-control.md)). `is_superadm
 
 ## MFA (TOTP)
 
-- Опциональна, настраивается пользователем самостоятельно через `/auth/mfa/setup`.
+- Опциональна, настраивается через `/auth/mfa/setup` + `/auth/mfa/verify` (уже авторизованный пользователь).
 - Реализация: стандартный TOTP (Google Authenticator, Authy).
-- Backup codes — 10 одноразовых кодов при настройке MFA.
+- **При входе** MFA enforced: если `mfa_enabled`, login **не** выдаёт токены без TOTP.
+
+### Поток входа с MFA
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as Backend
+
+    C->>API: POST /auth/login (email, password)
+    alt MFA выключена
+        API-->>C: 200 accessToken + refreshToken
+    else MFA включена
+        API-->>C: 403 MFA_REQUIRED + details.mfaToken
+        C->>API: POST /auth/mfa/complete (mfaToken, code)
+        API-->>C: 200 accessToken + refreshToken
+    end
+```
+
+Альтернатива: передать `mfaCode` сразу в `POST /auth/login`.
+
+Admin Panel: те же семантики на `/admin/auth/login` и `/admin/auth/mfa/complete`.
+
+**Клиентская спецификация (extension / portal / admin):** [integrations/auth-mfa-client.md](../integrations/auth-mfa-client.md).
 
 ## Регистрация
 
@@ -243,8 +271,10 @@ ALLOWED_ORIGINS = [
 | Эндпоинт | Лимит |
 |----------|-------|
 | `POST /auth/login` | 5 req/min per IP + per email |
+| `POST /auth/mfa/complete` | 5 req/min per IP |
 | `POST /auth/register` | 3 req/min per IP |
 | `POST /auth/refresh` | 10 req/min per token |
+| `POST /auth/mfa/setup` | 3 req/min per user |
 | `POST /auth/mfa/verify` | 5 req/min per user |
 
 Реализация: Redis sliding window.

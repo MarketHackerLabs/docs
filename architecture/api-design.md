@@ -24,9 +24,10 @@
 | Метод | Путь | Auth | Описание |
 |-------|------|:----:|----------|
 | POST | `/api/v1/auth/register` | — | Регистрация |
-| POST | `/api/v1/auth/login` | — | Вход |
+| POST | `/api/v1/auth/login` | — | Вход (при MFA → 403 `MFA_REQUIRED`) |
+| POST | `/api/v1/auth/mfa/complete` | — | Завершение входа с TOTP |
 | POST | `/api/v1/auth/refresh` | — | Обновление токена |
-| POST | `/api/v1/auth/logout` | ✓ | Выход |
+| POST | `/api/v1/auth/logout` | — | Выход (refresh + опционально access) |
 
 Эндпоинта смены организации нет — токен не привязан к организации, см. [Контроль доступа](./access-control.md).
 
