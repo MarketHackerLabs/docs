@@ -116,16 +116,46 @@ URL (см. [Контроль доступа](./access-control.md)). `is_superadm
 | POST | `/api/v1/auth/logout` | Отзыв refresh (+ опционально access `jti`) |
 | POST | `/api/v1/auth/mfa/setup` | Настройка TOTP (Bearer) |
 | POST | `/api/v1/auth/mfa/verify` | Подтверждение кода и включение MFA (Bearer) |
+| POST | `/api/v1/auth/mfa/disable` | Отключение MFA (password + TOTP) |
+| POST | `/api/v1/auth/password-reset/request` | Запрос восстановления (anti-enumeration, всегда 204) |
+| GET | `/api/v1/auth/password-reset/validate` | Проверка токена `{ valid }` |
+| POST | `/api/v1/auth/password-reset/confirm` | Установка нового пароля по токену |
+| POST | `/api/v1/auth/password/change` | Смена пароля (Bearer, текущий + новый) |
 
 Эндпоинтов "переключения" организации/кабинета намеренно нет — токен не
 завязан на конкретную организацию, а список организаций пользователь получает
 через `GET /organizations`.
 
+## Восстановление и смена пароля
+
+Пользователь запрашивает сброс → письмо со ссылкой → новый пароль. Ответ на
+запрос всегда одинаковый (не светим, есть ли такой email). Токен одноразовый,
+живёт `PASSWORD_RESET_TTL_MINUTES` (по умолчанию 60). После смены пароля все
+сессии гасятся; MFA не трогаем.
+
+Смена из настроек: `POST /auth/password/change` — тоже с гашением сессий.
+
+Из админки: `POST /admin/users/{id}/reset-password` (право
+`users:password:reset`) — только письмо со ссылкой, без пароля в ответе.
+
+Почта: `EMAIL_PROVIDER` = `console` | `smtp` | `unisender_go`.
+
 ## MFA (TOTP)
 
-- Опциональна, настраивается через `/auth/mfa/setup` + `/auth/mfa/verify` (уже авторизованный пользователь).
-- Реализация: стандартный TOTP (Google Authenticator, Authy).
-- **При входе** MFA enforced: если `mfa_enabled`, login **не** выдаёт токены без TOTP.
+- Включение: `/auth/mfa/setup` + `/auth/mfa/verify` (в ответе — одноразовые
+  резервные коды).
+- Секрет в БД шифруется (AES-GCM); старые plaintext-значения при проверке
+  перешифровываются.
+- Резервные коды: 10 шт., формат `XXXX-XXXX`, в БД только SHA-256; вход и
+  disable принимают TOTP или резервный код. Перевыпуск:
+  `POST /auth/mfa/backup-codes/regenerate`.
+- Выключение: `/auth/mfa/disable` (пароль + код).
+- Сброс из админки: `POST /admin/users/{id}/mfa/reset` (`users:mfa:reset`) —
+  выключает MFA, удаляет резервные коды и гасит сессии. Перед сбросом поддержка
+  обязана подтвердить владение аккаунтом:
+  [инструкция](../operations/support-mfa-reset.md).
+- На входе MFA обязательна, если включена.
+- Контракт для клиентов (в т.ч. расширения): [auth-mfa-client.md](../integrations/auth-mfa-client.md).
 
 ### Поток входа с MFA
 

@@ -162,12 +162,22 @@ async def require_search_tags_feature(session: AsyncSession, user_id: str) -> No
 }
 ```
 
-`is_superadmin` присутствует в payload только если пользователь — платформенный
-суперадмин (проверяется в БД при выдаче токена); используется исключительно
-для доступа в admin-panel (`require_superuser`), к организациям пользователя
-отношения не имеет.
+`is_superadmin` есть в JWT только у платформенного суперадмина; нужен для
+`require_superuser` в admin-panel, к организациям пользователя не относится.
 
-Подробности выдачи/ротации токенов — в [Аутентификации](./authentication.md).
+Права сотрудников поддержки (чаты, сброс пароля пользователя и т.п.) лежат в
+`support_staff_grants` и проверяются на сервере. Среди них:
+
+| Право | Зачем |
+|-------|-------|
+| `users:read` | Список и карточка пользователей |
+| `users:password:reset` | Отправить ссылку сброса пароля |
+| `users:mfa:reset` | Сбросить MFA |
+
+Выдача — в admin-panel: Поддержка → Сотрудники. Подробнее:
+[password-recovery.md](../integrations/password-recovery.md).
+
+Про токены — в [Аутентификации](./authentication.md).
 
 ---
 

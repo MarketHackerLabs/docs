@@ -21,6 +21,7 @@ MarketHacker — платформа для управления продажам
 ## Операции
 
 - [Production-деплой на чистый VPS](./operations/production-deploy.md) — полное руководство (Ubuntu 24.04, VK Cloud)
+- [Сброс MFA для поддержки](./operations/support-mfa-reset.md) — подтверждение владения аккаунтом перед сбросом
 
 ## Содержание
 
@@ -35,6 +36,7 @@ MarketHacker — платформа для управления продажам
 - [WB Gateway & Guided Connect](./architecture/wb-portal-proxy.md) — reverse proxy к seller.wildberries.ru, Guided Connect, JS-инжект
 - [Аутентификация и авторизация](./architecture/authentication.md)
 - [Клиент Auth + MFA](./integrations/auth-mfa-client.md) — контракт для extension / portal / admin
+- [Восстановление пароля](./integrations/password-recovery.md) — self-service и admin-сброс
 - [Безопасность](./architecture/security.md)
 - [Дизайн API](./architecture/api-design.md)
 - [Кэширование](./architecture/caching.md) — Redis response cache, `@cached_read`, инвалидация

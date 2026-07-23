@@ -61,7 +61,8 @@
 
 Клиент обязан:
 
-1. Показать UI ввода 6-значного TOTP.
+1. Показать UI ввода кода из приложения **или одноразового резервного кода**
+   (`XXXX-XXXX`).
 2. Сохранить `details.mfaToken` в памяти (не в long-lived storage).
 3. Вызвать complete (ниже). Не трактовать 403 MFA_REQUIRED как «неверный пароль» и не разлогинивать.
 
@@ -76,7 +77,9 @@
 }
 ```
 
-При неверном коде — **401** `UNAUTHORIZED` (`Invalid MFA code`).
+`mfaCode` / `code` на complete — TOTP (6–8 цифр) **или** резервный код (8 hex, с дефисами или без).
+
+При неверном коде — **401** `UNAUTHORIZED`.
 
 ### 3. Завершение MFA
 
@@ -91,6 +94,8 @@ Rate limit: **5/min**. Без Bearer.
 }
 ```
 
+В `code` допустим и резервный код, например `"AB12-CD34"`.
+
 **200** — та же `TokenResponse`, что у login.
 
 | Ошибка | Когда |
@@ -103,9 +108,34 @@ Rate limit: **5/min**. Без Bearer.
 | Метод | Путь | Auth | Назначение |
 |-------|------|------|------------|
 | POST | `/api/v1/auth/mfa/setup` | Bearer | Получить `secret` + `provisioningUri` (otpauth) |
-| POST | `/api/v1/auth/mfa/verify` | Bearer | Подтвердить код и **включить** MFA |
+| POST | `/api/v1/auth/mfa/verify` | Bearer | Подтвердить TOTP, **включить** MFA, выдать резервные коды |
+| GET | `/api/v1/auth/mfa/backup-codes` | Bearer | Сколько неиспользованных резервных кодов осталось |
+| POST | `/api/v1/auth/mfa/backup-codes/regenerate` | Bearer | Перевыпуск (`password` + TOTP/резервный код) |
+| POST | `/api/v1/auth/mfa/disable` | Bearer | Отключить MFA (`password` + TOTP/резервный код) |
 
-`verify` после setup **не** выдаёт токены — только включает MFA для аккаунта. Вход с MFA идёт через login → complete.
+**Ответ `verify`:**
+
+```json
+{
+  "data": {
+    "enabled": true,
+    "backupCodes": ["AB12-CD34", "…"]
+  }
+}
+```
+
+`backupCodes` — **только при первом включении** (10 одноразовых кодов). Показать пользователю один раз; в БД хранятся только хеши. Повторный `verify` при уже включённой MFA вернёт `backupCodes: null`.
+
+`regenerate` возвращает `{ "backupCodes": […] }` и инвалидирует предыдущие неиспользованные.
+
+Manager Portal: Настройки → Безопасность — включение MFA, показ/перевыпуск резервных кодов, отключение.
+
+### Extension
+
+В расширении нужна полная поддержка того же контракта: вход с MFA
+(`MFA_REQUIRED` → `/auth/mfa/complete`), настройка/отключение MFA, смена и
+восстановление пароля. Реализацию делает разработчик расширения по этому
+документу и [password-recovery.md](./password-recovery.md).
 
 ### 5. Logout (усиление)
 
@@ -144,7 +174,8 @@ Support staff может войти через admin login, но **не** пол
 ```
 [ ] Обработать error.code === "MFA_REQUIRED" отдельно от прочих 403
 [ ] Не сохранять mfaToken в localStorage / chrome.storage.local
-[ ] Поле ввода кода: inputMode=numeric, autocomplete=one-time-code, 6 цифр
+[ ] Поле кода: TOTP или резервный `XXXX-XXXX`, autocomplete=one-time-code
+[ ] После setup/verify показать backupCodes один раз (копирование / скачивание)
 [ ] После успешного complete — обычное сохранение access/refresh
 [ ] При истечении mfaToken (~5 мин) — вернуть пользователя на шаг пароля
 [ ] Неверный MFA-код: показать ошибку, оставить на шаге кода (тот же mfaToken, пока жив)
@@ -232,15 +263,17 @@ async function loginWithMfa(params: {
 
 ---
 
-## Extension: дополнительные рекомендации (без обязательного кода в этом PR)
+## Extension
 
-Backend не требует изменений extension в том же релизе, что MFA API, но для безопасной реализации:
+Расширение должно реализовать тот же auth-контракт, что и Manager Portal:
+MFA на входе, настройка/отключение MFA, смена и восстановление пароля.
+Делает разработчик расширения; backend уже готов.
 
-1. **MFA** — как в чеклисте выше на экране login/register.
-2. **Background fetch** — принимать только URL с allowlist хостов (`*.markethacker.ru`, WB/Ozon/Lamoda) и `sender.id === chrome.runtime.id`.
+Дополнительно:
+
+1. **MFA** — по чеклисту выше на экране login (и в настройках аккаунта).
+2. **Background fetch** — только URL с allowlist хостов (`*.markethacker.ru`, WB/Ozon/Lamoda) и `sender.id === chrome.runtime.id`.
 3. Токены предпочтительно в `chrome.storage.session`; при logout отзывать access через body `accessToken`.
-
-Реализацию делает фронтенд по этому документу.
 
 ---
 
