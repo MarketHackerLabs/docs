@@ -34,3 +34,7 @@
 ## Почта
 
 `EMAIL_PROVIDER`: `console` (в лог API через structlog, событие `email.console`), `smtp` (Gmail и т.п.), `unisender_go`. Параметры — в backend `.env.example`.
+
+Для Unisender Go в HTML/plaintext автоматически добавляется своя ссылка
+`{{UnsubscribeUrl}}` — иначе провайдер вставляет стандартный блок «Это сообщение
+было отправлено … Отписаться от рассылки». См. [документацию Unisender](https://godocs.unisender.ru/unsubscribe-link#customizing).
