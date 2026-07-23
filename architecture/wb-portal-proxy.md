@@ -133,12 +133,43 @@ Cookie `SameSite=None` означает, что браузер приложит 
 
 `https://team.markethacker.ru` и прочие HTTPS-origin из CORS **не** whitelisted здесь — иначе CSRF с cookie из manager-portal.
 
-### Аутентификация extension к wb-proxy
+## Аутентификация extension к wb-proxy
 
-Browser extension не может полагаться на httpOnly-cookie `mh_gw_session`. Flow:
+Browser extension **не** использует отдельный Bearer-токен к wb-proxy.
+Рабочий путь для менеджера — вкладка кабинета с httpOnly cookie `mh_gw_session`
+после `handshake` + `auth/callback` (как в manager-portal).
 
-1. `POST /api/v1/wb-gateway/handshake` с platform access JWT → в ответе `gatewaySessionToken` (короткоживущий JWT типа `wb_gateway_session`).
-2. Запросы к `https://wb-proxy.markethacker.ru/__content__/ns/...` с `Authorization: Bearer <gatewaySessionToken>` — сервер подставляет upstream headers/cookies из CredentialVault так же, как для вкладки кабинета.
+Ранее в документации описывался `gatewaySessionToken` / `Authorization: Bearer` —
+этот контракт **не реализован** и не планируется для extension: секреты WB
+остаются только server-side в vault, ACL enforced на gateway.
+
+Extension может вызывать **платформенные** API MarketHacker с обычным access JWT;
+проксирование seller-кабинета идёт через browser-сессию `mh_gw_session`.
+
+---
+
+## Прокси для кабинетов WB
+
+По умолчанию запросы к Wildberries идут с IP нашего сервера.
+
+Чтобы снизить риск ограничений при росте числа кабинетов, в админке
+(Команда → **Прокси кабинетов**) включают пул прокси:
+
+1. При создании кабинета ему назначается наименее загруженный прокси
+   (пока не достигнут лимит кабинетов на адресе).
+2. Назначение сохраняется и не меняется при повторном подключении кабинета.
+3. Несколько кабинетов могут делить один прокси — до лимита на адресе.
+   Когда все места заняты, создание нового кабинета отклоняется.
+4. Gateway, Guided Connect и обновление токена (`slide-v3`) ходят через тот же прокси.
+5. HTTP-клиенты переиспользуют соединения (keep-alive) на каждый адрес прокси.
+
+Настройки хранятся в `platform_settings.wb_egress`. API админки:
+`GET/PUT /api/v1/admin/wb-egress`.
+
+Лучше брать прокси с IP домашнего/офисного провайдера (ISP), не «датацентровые».
+
+Метрики: `mh_wb_gateway_requests_total`, `mh_wb_gateway_upstream_latency_seconds`,
+`mh_wb_gateway_upstream_errors_total`, `mh_wb_gateway_rate_limited_total`.
 
 ---
 
@@ -468,6 +499,9 @@ WB_CONNECT_PUBLIC_BASE_URL=https://wb-connect.markethacker.ru/api/v1/wb-connect
 # WB_TOKEN_REFRESH_THRESHOLD_SECONDS=300
 # WB_TOKEN_MAX_AGE_SECONDS=1800
 # WB_GATEWAY_SESSION_TTL_MINUTES=30
+# WB_GATEWAY_MAX_CONCURRENT_PER_ACCOUNT=25
+# WB_GATEWAY_PROXY_RATE_LIMIT=120/minute
+# Прокси кабинетов: Админка → Команда → Прокси кабинетов
 ```
 
 > ⚠️ `WB_CONNECT_PUBLIC_BASE_URL` **обязан** включать путь `/api/v1/wb-connect` — в отличие от `wb-proxy`, Caddy-блок `wb-connect` НЕ делает rewrite (см. `caddy/Caddyfile`), путь передаётся как есть. Без него guided connect URL'ы будут вести на несуществующий `/connect/...` вместо `/api/v1/wb-connect/connect/...`.
@@ -548,6 +582,10 @@ CORS_ORIGINS=["https://team.markethacker.ru","https://admin.markethacker.ru","ch
 
 | Файл | Назначение |
 |------|------------|
+| `backend/src/markethacker/modules/wb_gateway/application/egress_service.py` | Назначение и выбор прокси для кабинета |
+| `backend/src/markethacker/modules/wb_gateway/infrastructure/upstream_http_pool.py` | Общий httpx-пул с keep-alive |
+| `backend/src/markethacker/modules/wb_gateway/infrastructure/concurrency.py` | Лимит одновременных запросов на кабинет |
+| `backend/src/markethacker/modules/wb_gateway/infrastructure/metrics.py` | Метрики Prometheus по gateway |
 | `backend/src/markethacker/modules/wb_gateway/api/router.py` | Handshake, auth callback, logout, reverse proxy, CSRF-проверка |
 | `backend/src/markethacker/modules/wb_gateway/application/gateway_service.py` | Оркестрация: handshake, проксирование, section enforcement |
 | `backend/src/markethacker/modules/wb_gateway/application/session_service.py` | JWT-сессия с Redis revocation |

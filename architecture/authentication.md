@@ -262,29 +262,17 @@ GET /api/v1/extension/config
 
 ## WB Gateway из browser extension
 
-Расширение не использует httpOnly-cookie `mh_gw_session`. Вместо этого:
+Extension **не** ходит в wb-proxy с отдельным Bearer. Кабинет WB открывается
+как в manager-portal: `handshake` → `auth/callback` → cookie `mh_gw_session` во
+вкладке. Секреты WB (authorizev3, `wbx-validation-key`) остаются только в vault
+на сервере.
 
-1. С platform access JWT: `POST /api/v1/wb-gateway/handshake { accountId }`.
-2. Сохранить `gatewaySessionToken` из ответа (TTL ≈ `wb_gateway_session_ttl_minutes`).
-3. Вызывать WB API через wb-proxy:
+Ранее описанный контракт `gatewaySessionToken` / `Authorization: Bearer` к
+`wb-proxy` **не реализован** и не используется.
 
-```typescript
-await fetch(
-  "https://wb-proxy.markethacker.ru/__content__/ns/analytics-api/content-analytics/api/v1/sales-funnel/report",
-  {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${gatewaySessionToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  },
-);
-```
-
-CSRF: для POST/PUT/PATCH/DELETE браузер extension автоматически шлёт `Origin: chrome-extension://<id>` — этот origin должен быть в `CORS_ORIGINS` и/или `WB_GATEWAY_TRUSTED_EXTENSION_ORIGINS`. Upstream-авторизация WB (authorizev3, cookies) подставляется сервером; extension не хранит и не передаёт секреты WB.
-
-Подробнее: [WB Portal Proxy](./wb-portal-proxy.md#аутентификация-extension-к-wb-proxy).
+CSRF для мутирующих запросов с вкладки кабинета: Origin = `wb_gateway_origin`.
+Trusted `chrome-extension://` origins нужны только если extension делает
+state-changing fetch на wb-proxy с cookie (обычно не требуется).
 
 ## CORS
 
