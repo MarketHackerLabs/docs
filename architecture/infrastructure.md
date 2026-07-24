@@ -162,7 +162,7 @@ Docker-сети (межсервисное):
 | Сети (bootstrap) | `infra/` | `make networks` | — |
 | Backend infra | `backend/` | `docker-compose.yml` | — |
 | Backend app | `backend/` | `docker-compose.prod.yml` | 8000 |
-| Parser infra | `parser/` | `docker-compose.yml` | — |
+| Parser infra | `parser/` | `docker-compose.yml` (+ `docker-compose.infra.prod.yml` на VPS; Kafka retention 2d) | — |
 | Parser app | `parser/` | `docker-compose.prod.yml` | 8010 |
 | Admin Panel | `admin-panel/` | `docker-compose.prod.yml` | 3001 |
 | Manager Portal | `manager-portal/` | `docker-compose.prod.yml` | 3002 |

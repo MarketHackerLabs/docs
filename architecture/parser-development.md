@@ -148,7 +148,11 @@ KAFKA_BOOTSTRAP_SERVERS=kafka:9092
 cd infra && make networks
 cd ../parser
 make infra-up-prod    # поднимает postgres, pgbouncer, redis, clickhouse, kafka
+make kafka-topics     # партиции + retention.ms=2d на топиках парсера
 ```
+
+На prod Kafka хранит данные **не дольше 2 суток** (`docker-compose.infra.prod.yml`:
+`KAFKA_LOG_RETENTION_MS=172800000`). Долгосрочное хранение — в ClickHouse.
 
 ### 3. Задеплоить код и миграции
 

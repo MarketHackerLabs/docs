@@ -509,7 +509,8 @@ make prod-health            # /healthz /readyz на :8000
 
 ```bash
 cd /opt/markethacker/parser
-make infra-up-prod          # postgres, pgbouncer, redis, clickhouse, kafka
+make infra-up-prod          # postgres, pgbouncer, redis, clickhouse, kafka (retention 2d)
+make kafka-topics           # партиции + retention.ms=2d на топиках
 make prod-migrate           # PG + ClickHouse
 make prod-up
 curl -fsS http://127.0.0.1:8010/api/v1/readyz
