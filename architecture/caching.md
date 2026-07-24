@@ -70,30 +70,28 @@ flowchart TB
 1. **Read:** hit + fresh → вернуть; miss/stale → single-flight.
 2. **Leader:** повторная проверка → factory → `cache_set` → release lock.
 3. **Follower + stale (SWR):** сразу отдать stale, **без** ожидания leader.
-4. **Follower + miss:** ждёт появления fresh-значения:
-   - async/PG-источники — по умолчанию **~3 с** (`singleflight_wait_seconds`);
-   - sync/ClickHouse — по умолчанию **~30 с**;
-   - политика может задать значение явно.
-5. **Timeout / leader failed:** fail-open — follower строит сам.
-6. **Stale fallback:** при ошибке источника отдаётся устаревший envelope (если есть).
-7. **Warm:** ARQ/`WarmupRunner` заранее вызывает те же `fetch()`, перезаписывая ключи.
-8. **Invalidate:** scoped delete (key / entity / namespace), без `FLUSHDB`.
+4. **Follower + miss:** 
+   - async/PG (`wait=0`) — сразу parallel rebuild (без Redis-poll);
+   - sync/ClickHouse — ждёт fresh до ~30 с, затем fail-open.
+5. **In-process Future:** concurrent awaiters на одном worker делят один build.
+6. **``CACHE_ENABLED=false``:** factory напрямую — **без** Redis lock/wait
+   (раньше single-flight всё равно ждал → ложные задержки 3–30 с).
+7. **Stale fallback / Warm / Invalidate** — без изменений по смыслу.
 
 ### Почему разные wait
 
 Единый wait 30 с был рассчитан на тяжёлые ClickHouse-запросы. Для
 `billing:effective_plan` (PG, build p95 ≪ 100 мс) followers при stampede
-упирались в полный 30-секундный таймаут — это проявлялось как «API висит
->30 с» в manager-portal (`/users/me`, `/promotions/active`), тогда как
-admin-panel этот путь не использует.
+упирались в полный таймаут — особенно при ``CACHE_ENABLED=false``, когда
+значение в Redis никогда не появляется, а lock/wait всё равно активны.
 
 | Источник | Дефолтный wait | SWR (stale_ttl) |
 |----------|----------------|-----------------|
-| PG / async (`get_or_set`) | 3 с | рекомендуется |
+| PG / async (`get_or_set`) | **0 с** (parallel rebuild) | рекомендуется |
 | ClickHouse / sync (`get_or_set_sync`) | 30 с | обычно уже задан |
-| `billing:effective_plan` | 3 с | 5 мин |
+| `billing:effective_plan` | 0 с | 5 мин |
 
-Метрика: `mh_cache_singleflight_total{result="follower_timeout"|"stale_served"}`.
+Метрика: `mh_cache_singleflight_total{result=~"follower_timeout|stale_served|in_process_shared|follower_parallel"}`.
 
 ## Где объявляется политика
 
