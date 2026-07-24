@@ -65,9 +65,24 @@ sequenceDiagram
 |---------|----------|-------------------|
 | 1 | **Webhook** | ЮKassa отправляет `payment.succeeded` / `payment.canceled` |
 | 2 | **Фоновая сверка** | ARQ-задача через N сек после checkout + cron каждые 5 мин |
-| 3 | **Ручная проверка** | Пользователь вызывает `/payments/{id}/verify` после возврата с оплаты |
+| 3 | **Ручная проверка** | Клиент вызывает `/payments/{id}/verify` после возврата с оплаты |
 
-Все три пути используют общую логику `_reconcile_payment`: запрос статуса в API ЮKassa, обновление `billing_payments`, активация подписки при `succeeded` + `paid`.
+Все три пути используют общую логику `_reconcile_payment`: запрос статуса в API ЮKassa, обновление `billing_payments`, атомарная активация подписки при `succeeded` + `paid`.
+
+### Активация подписки
+
+Критический участок выполняется в одной DB-транзакции с `SELECT … FOR UPDATE`:
+
+1. блокировка строки `billing_payments`;
+2. если `processed_at` уже задан — выход (идемпотентность);
+3. блокировка / upsert `billing_subscriptions`;
+4. установка `processed_at` в той же транзакции.
+
+Побочные эффекты (сохранение карты, promo, commission) выполняются после commit и не откатывают выдачу подписки.
+
+Оплаченные платежи без `processed_at` cron подбирает **без ограничения max_age** (кроме terminal `processing_error`: `test_payment_rejected`, `missing_plan`, `unknown_plan`, `missing_product`).
+
+Неизвестный webhook (нет локальной записи): попытка restore из metadata; при неудаче — HTTP 503 (повтор доставки ЮKassa).
 
 ### Фоновые задачи (ARQ)
 
@@ -623,27 +638,39 @@ modules/billing/
 ## Идемпотентность
 
 - Каждый платёж ЮKassa хранится в `billing_payments` с unique `yookassa_payment_id`.
-- Поле `processed_at` предотвращает повторную активацию подписки при дублирующих webhook/sync.
-- Webhook, cron и ручная verify безопасно вызываются многократно.
+- Поле `processed_at` + `SELECT FOR UPDATE` предотвращают повторную активацию при дублирующих webhook/sync.
+- Повторный webhook после успешной активации безопасен.
+- Повторная обработка оплаченного платежа с `processed_at IS NULL` восстанавливает выдачу подписки.
+- `processing_error` фиксирует блокирующие ошибки (`test_payment_rejected`, `missing_plan`, …) для алерта и аудита.
+
+## Мониторинг
+
+| Метрика | Смысл |
+|---------|--------|
+| `mh_billing_paid_unprocessed` | Оплачено, подписка не активирована |
+| `mh_billing_activation_errors` | Есть `processing_error` |
+| `mh_billing_activations_total` | Исходы активации |
+| `mh_billing_yookassa_webhooks_total` | Исходы webhook |
+
+Алерты: `BillingPaidUnprocessed` (critical), `BillingActivationErrors` (warning).
+
+Admin: `GET /admin/billing/payments/reconciliation`, `POST /admin/billing/payments/reconciliation/sync`, `POST /admin/billing/payments/{id}/verify`.
 
 ## Интеграция во фронтенде
 
-**Manager Portal** — страница `/billing` (компонент `BillingWorkspace`):
+**Manager Portal** — страница `/billing`:
 
-- доступна любому авторизованному пользователю (подписка per-user; организация
-  не обязательна);
-- текущая подписка и usage (включая `baseLimit`, `grandfathered`, `purchasedExtra`);
-- единый блок: тарифы + промокод + докупка лимитов + отмена подписки;
-- для `discount` на карточках планов — зачёркнутая старая цена и новая со скидкой;
-- `POST /billing/subscription/upgrade` принимает optional `promoCode`.
+- перед редиректом на ЮKassa сохраняет `paymentId` в `sessionStorage`;
+- после возврата (`?success=1`) вызывает `POST /billing/payments/{id}/verify` и обновляет подписку.
 
-После редиректа с оплаты подписки или докупки:
+**Browser extension** — после оплаты возвращается на страницу WB и только refetch'ит subscription. Активация должна прийти с webhook/cron (уровень 1–2); клиентского verify в расширении нет.
+
+После редиректа с оплаты (Manager Portal):
 
 ```typescript
-const paymentId = searchParams.get("paymentId"); // передать из checkout flow
+const paymentId = sessionStorage.getItem("mh_pending_yookassa_payment");
 if (paymentId) {
-  await api.post(`/billing/payments/${paymentId}/verify`);
-  // обновить состояние подписки / докупки
+  await api.verifyYookassaPayment(paymentId, token);
 }
 ```
 
@@ -652,4 +679,5 @@ if (paymentId) {
 - тестовый платёж: **Настройки → Оплата (ЮKassa) → Проверить интеграцию**;
 - промокоды: **Биллинг → Промокоды**;
 - докупка лимитов: **Биллинг → Докупка лимитов** (продукты + режим оплаты);
+- сверка зависших оплат: `GET/POST /admin/billing/payments/reconciliation*`;
 - партнёры: **Партнёры** (профили, кампании, аналитика). См. [Партнёры](./partners.md).
