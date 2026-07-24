@@ -44,6 +44,9 @@ clickhouse/migrations/
   007_wb_search_tags_top_order_subject_id.sql
   008_wb_market_niche.sql
   009_wb_market_niche_kafka.sql
+  010_merge_memory_tuning.sql
+  011_wb_search_tags_kafka_partitions.sql
+  012_wb_search_tags_query_projection.sql  -- p_by_interval_query; MATERIALIZE по партициям вручную
 ```
 
 - Трекинг в `_schema_migrations` (MergeTree)
