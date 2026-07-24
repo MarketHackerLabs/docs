@@ -624,8 +624,7 @@ modules/billing/
 │   ├── payments/           # provider-agnostic точки входа / реестр
 │   ├── promo_service.py    # Валидация, redeem, скидки
 │   ├── limit_addon_service.py  # Каталог, checkout, entitlements
-│   ├── limit_adjustments.py    # Промо-бусты + докупки → effective limits
-│   └── yookassa_service.py # shim → providers.yookassa
+│   └── limit_adjustments.py    # Промо-бусты + докупки → effective limits
 ├── providers/              # Адаптеры платёжных систем
 │   ├── base.py             # Protocol PaymentProvider
 │   ├── registry.py         # get_payment_provider(name)
