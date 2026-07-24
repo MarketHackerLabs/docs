@@ -69,10 +69,31 @@ flowchart TB
 
 1. **Read:** hit + fresh → вернуть; miss/stale → single-flight.
 2. **Leader:** повторная проверка → factory → `cache_set` → release lock.
-3. **Follower:** ждёт появления fresh-значения (до ~30 с); при timeout — fail-open, строит сам.
-4. **Stale fallback:** при ошибке источника отдаётся устаревший envelope (если есть).
-5. **Warm:** ARQ/`WarmupRunner` заранее вызывает те же `fetch()`, перезаписывая ключи.
-6. **Invalidate:** scoped delete (key / entity / namespace), без `FLUSHDB`.
+3. **Follower + stale (SWR):** сразу отдать stale, **без** ожидания leader.
+4. **Follower + miss:** ждёт появления fresh-значения:
+   - async/PG-источники — по умолчанию **~3 с** (`singleflight_wait_seconds`);
+   - sync/ClickHouse — по умолчанию **~30 с**;
+   - политика может задать значение явно.
+5. **Timeout / leader failed:** fail-open — follower строит сам.
+6. **Stale fallback:** при ошибке источника отдаётся устаревший envelope (если есть).
+7. **Warm:** ARQ/`WarmupRunner` заранее вызывает те же `fetch()`, перезаписывая ключи.
+8. **Invalidate:** scoped delete (key / entity / namespace), без `FLUSHDB`.
+
+### Почему разные wait
+
+Единый wait 30 с был рассчитан на тяжёлые ClickHouse-запросы. Для
+`billing:effective_plan` (PG, build p95 ≪ 100 мс) followers при stampede
+упирались в полный 30-секундный таймаут — это проявлялось как «API висит
+>30 с» в manager-portal (`/users/me`, `/promotions/active`), тогда как
+admin-panel этот путь не использует.
+
+| Источник | Дефолтный wait | SWR (stale_ttl) |
+|----------|----------------|-----------------|
+| PG / async (`get_or_set`) | 3 с | рекомендуется |
+| ClickHouse / sync (`get_or_set_sync`) | 30 с | обычно уже задан |
+| `billing:effective_plan` | 3 с | 5 мин |
+
+Метрика: `mh_cache_singleflight_total{result="follower_timeout"|"stale_served"}`.
 
 ## Где объявляется политика
 
@@ -98,8 +119,8 @@ modules/admin/infrastructure/clickhouse/queries/
 
 ```
 modules/billing/infrastructure/cached/
-├── get_all_plans.py      # каталог активных тарифов (platform), TTL 1 ч
-├── effective_plan.py     # тариф пользователя, user scope, TTL 60 с
+├── get_all_plans.py      # каталог активных тарифов (platform), TTL 1 ч, SWR 2 ч
+├── effective_plan.py     # тариф пользователя, user scope, TTL 60 с, SWR 5 мин, wait 3 с
 └── _plan_codec.py
 
 modules/organizations/infrastructure/cached/
@@ -232,8 +253,11 @@ TTL для конкретных операций задаётся в коде у
 | `mh_cache_build_duration_seconds` | время factory |
 | `mh_cache_read_duration_seconds` | чтение Redis |
 | `mh_cache_rebuilds_total` | перестроения |
-| `mh_cache_singleflight_total` | leader / follower / follower_timeout |
+| `mh_cache_singleflight_total` | leader / follower / follower_timeout / stale_served |
 | `mh_cache_warmup_total` / `_duration_seconds` / `_keys_total` | прогрев |
+
+Алерты (Prometheus): `CacheSingleflightFollowerTimeout`, `UsersMeHighLatency` —
+см. `monitoring/prometheus/alerts.yml`.
 
 ## Добавление нового кэшируемого сервиса
 
