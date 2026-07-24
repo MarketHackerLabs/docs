@@ -286,7 +286,7 @@ GET /api/v1/search-tags/queries/frequency-trends?query=кроссовки&series
 }
 ```
 
-Источник: таблица `wb_search_tags` (+ join `wb_subjects_dict` / `wb_market_niche` для monthly). Lookup по точному `query`: вход нормализуется (`strip` + `lower`) в backend, в SQL — равенство `query = …` без `lowerUTF8` (иначе PK/projection по `query` не работают). Frequency-trends — один round-trip (CTE: latest month + yesterday + series). Projection `p_by_interval_query` (`ORDER BY (interval, query, period_start)`, миграция parser `012`). Кэш: `@cached_read` (TTL 30 / 15 мин; trends — 15 мин). См. [Кэширование](./caching.md), [Parser Service](./parser.md).
+Источник: таблица `wb_search_tags` (+ join `wb_subjects_dict` / `wb_market_niche` для monthly). Lookup по точному `query`: вход нормализуется (`strip` + `lower`) в backend, в SQL — равенство `query = …` без `lowerUTF8` (иначе PK/projection по `query` не работают). Frequency-trends — один round-trip (CTE: latest month + yesterday + series). Projection `p_by_interval_query` (`ORDER BY (interval, query, period_start)`, миграция parser `012`). Кэш: `@cached_read` (TTL **24 ч**, stale 48 ч) + прогрев (cron / parser webhook / admin). См. [Кэширование](./caching.md), [Parser Service](./parser.md).
 
 ### Admin — Parser / ClickHouse
 
