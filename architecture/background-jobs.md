@@ -32,6 +32,7 @@ flowchart LR
 | `sync_yookassa_payment` | defer (3 мин) | Сверка одного платежа ЮKassa после checkout |
 | `process_pending_yookassa_payments` | каждые 5 мин | Сверка всех незавершённых платежей ЮKassa |
 | `process_yookassa_renewals` | ежедневно 02:00 UTC | Автопродление подписок ЮKassa; в режиме `bundled` — доплата докупок; в `separate` — отдельные продления entitlements |
+| `warm_cache_sources` / `schedule_daily_cache_warmup` | ежедневно 02:00 UTC (05:00 MSK) + webhook parser | Прогрев Redis-кэша зарегистрированных `CacheSource` (search_tags и др.); см. [Кэширование](./caching.md) |
 
 > Биллинг: [Биллинг и оплата](./billing.md)
 

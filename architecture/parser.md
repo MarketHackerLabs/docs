@@ -26,6 +26,10 @@ flowchart TB
 
 Parser публикует события в Kafka. ClickHouse читает топики через Kafka Engine — прямой записи из worker в CH нет.
 
+После успешного `mark_completed` для `wb_search_tags` / `wb_market_niche` worker вызывает backend
+`POST /api/v1/internal/parser/jobs/completed` (`BACKEND_SERVICE_URL`, заголовок `X-Parser-Callback-Key`) —
+backend ставит отложенный прогрев Redis-кэша search_tags. Подробнее: [Кэширование](./caching.md).
+
 ## Миграции
 
 ### PostgreSQL — Alembic
