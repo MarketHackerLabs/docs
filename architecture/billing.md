@@ -581,7 +581,7 @@ sequenceDiagram
 
 ## Переменные окружения
 
-Секреты задаются только в `.env` (не в админ-панели):
+Секреты задаются только в `.env` (не в админ-панели). В коде — `settings.billing.providers.*`.
 
 | Переменная | Описание |
 |------------|----------|
@@ -591,10 +591,15 @@ sequenceDiagram
 | `YOOKASSA_TEST_SECRET_KEY` | Секрет тестового магазина |
 | `YOOKASSA_DEFAULT_RECEIPT_EMAIL` | Email для фискальных чеков (обязателен) |
 | `YOOKASSA_RECURRENT_ENABLED` | Сохранение карт и автопродление |
+| `YOOKASSA_RECURRENT_REQUIRED` | Обязательно сохранять карту при checkout |
 | `YOOKASSA_AUTOPAY_DAYS_BEFORE` | За сколько дней до конца периода списывать |
+| `YOOKASSA_VAT_CODE` / `PAYMENT_MODE` / `PAYMENT_SUBJECT` | Параметры фискального чека |
+| `YOOKASSA_HTTP_CONNECT_TIMEOUT` / `HTTP_READ_TIMEOUT` | Таймауты HTTP-клиента |
 | `YOOKASSA_TEST_MODE` | Принимать тестовые платежи в production |
 | `YOOKASSA_ALLOWED_IPS_EXTRA` | Доп. CIDR для webhook IP validation |
 | `YOOKASSA_TRUSTED_PROXY_NETWORKS` | Доверенные прокси для определения IP |
+| `STRIPE_SECRET_KEY` | Stripe secret (limited support) |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
 
 Фоновая сверка платежей:
 
@@ -604,7 +609,10 @@ sequenceDiagram
 | `YOOKASSA_PAYMENT_SYNC_MIN_AGE_SECONDS` | 120 | Минимальный возраст платежа для cron-сверки |
 | `YOOKASSA_PAYMENT_SYNC_MAX_AGE_HOURS` | 24 | Не проверять платежи старше |
 
-Операционные настройки (shop_id, VAT, режим тестового магазина, **режим докупки лимитов**) редактируются в админ-панели → **Настройки → Оплата (ЮKassa)** или **Биллинг → Докупка лимитов** без перезапуска API. Значения попадают в runtime-кэш (`platform_settings.application.cache`).
+Операционные настройки (shop_id, VAT, режим тестового магазина, **режим докупки лимитов**, `payment_success_url`) редактируются в админ-панели → **Настройки → Оплата (ЮKassa)** или **Биллинг → Докупка лимитов** без перезапуска API. Значения попадают в runtime-кэш (`platform_settings.application.cache`).
+
+`yookassa_use_test_shop` (панель) переключает **магазин** (test vs prod credentials).  
+`YOOKASSA_TEST_MODE` разрешает принимать **тестовые платежи** на активном магазине — другая семантика.
 
 ## Структура модуля
 
@@ -612,12 +620,17 @@ sequenceDiagram
 modules/billing/
 ├── api/                    # router, schemas
 ├── application/
-│   ├── service.py          # BillingService (фасад, usage, effective plan)
+│   ├── service.py          # BillingService (фасад: plans, limits, routing to providers)
+│   ├── payments/           # provider-agnostic точки входа / реестр
 │   ├── promo_service.py    # Валидация, redeem, скидки
 │   ├── limit_addon_service.py  # Каталог, checkout, entitlements
 │   ├── limit_adjustments.py    # Промо-бусты + докупки → effective limits
-│   ├── limit_boosts.py     # Обратная совместимость (re-export)
-│   └── yookassa_service.py # Checkout, webhook, sync, renewals
+│   └── yookassa_service.py # shim → providers.yookassa
+├── providers/              # Адаптеры платёжных систем
+│   ├── base.py             # Protocol PaymentProvider
+│   ├── registry.py         # get_payment_provider(name)
+│   ├── yookassa/           # Checkout, webhook, sync, renewals (основной PSP)
+│   └── stripe/             # Checkout + webhook (limited support)
 ├── domain/
 │   ├── models.py           # Plan, Subscription, Payment, PromoCode, LimitAddon*, ...
 │   ├── limit_catalog.py    # Реестр типов лимитов
@@ -634,6 +647,25 @@ modules/billing/
     ├── yookassa_renewals.py
     └── yookassa_payment_sync.py
 ```
+
+### Конфигурация
+
+Корневой раздел: `Settings.billing` (`config/billing.py`).
+
+| Путь | Env |
+|------|-----|
+| `billing.providers.yookassa.*` | `YOOKASSA_*` |
+| `billing.providers.stripe.*` | `STRIPE_*` |
+
+Операционные параметры (shop override, VAT, recurrent, `payment_success_url`, режимы докупки) — в `platform_settings` (админка + runtime cache).
+
+### Добавление нового платёжного провайдера
+
+1. Создать пакет `providers/<name>/` с сервисом, реализующим `PaymentProvider`.
+2. Зарегистрировать в `providers/registry.py`.
+3. Добавить nested settings в `config/billing.py` (`BillingProvidersSettings`).
+4. При необходимости — webhook-эндпоинт в `api/router.py`.
+5. Обновить документацию и тесты.
 
 ## Идемпотентность
 
