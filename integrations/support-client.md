@@ -8,6 +8,8 @@ OpenAPI: `{API}/docs` (tag `support`)
 
 Агенты: `POST /admin/auth/login`, права — `GET /support/staff/me`.
 
+В Manager Portal у `isSupportStaff` клиентский виджет не открывает чат — ведёт в Admin Panel `/support`.
+
 ---
 
 ## Модель для клиента

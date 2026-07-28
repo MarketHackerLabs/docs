@@ -51,10 +51,12 @@ clients → FastAPI modules/support (REST + WS + Telegram webhook)
 | Действие | Endpoint | Право |
 |----------|----------|--------|
 | Взять | `POST .../claim` | `assign` |
-| Передать | `POST .../assign` `{ assigneeId }` | `assign` |
-| Отпустить | `POST .../unassign` | `assign` |
+| Передать / забрать себе | `POST .../assign` `{ assigneeId }` | `assign` |
+| Отпустить / открепить | `POST .../unassign` | `assign` |
 
-Optimistic claim: `UPDATE … WHERE assignee_id IS NULL`.
+Optimistic claim: `UPDATE … WHERE assignee_id IS NULL`.  
+Забрать у другого агента — через `assign` на себя (Admin UI с подтверждением).  
+Открепить чужое назначение — `unassign` при праве `assign` (или superuser).
 
 ---
 
@@ -97,7 +99,7 @@ Control: `ping`/`pong`, `subscribe`/`unsubscribe`/`subscribed`, `error`.
 
 ## Admin UI
 
-- `/support` — инбокс, ответ, теги, приоритет, заметки, лог, claim/transfer
+- `/support` — инбокс, ответ, теги, приоритет, заметки, лог, claim/transfer/reclaim/unassign
 - `/support/staff` — гранты (модалка), удаление
 - `/support/settings` — Telegram (токен в env)
 
@@ -106,12 +108,20 @@ Control: `ping`/`pong`, `subscribe`/`unsubscribe`/`subscribed`, `error`.
 
 Индекс: `ix_support_conv_tags_tag_id` на `support_conversation_tags(tag_id)`.
 
+Очистка клиентских чатов у staff (одноразово):  
+`uv run python scripts/purge_support_staff_customer_chats.py --dry-run`  
+затем без `--dry-run`.
+
 ---
 
 ## Manager Portal
 
-Плавающий виджет справа внизу. `/support` редиректит на dashboard.  
-WS всегда на (бейдж непрочитанных + звук).
+Плавающий виджет справа внизу. `/support` редиректит на dashboard.
+
+- **Клиент** (без grant поддержки): чат + WS (бейдж непрочитанных + звук).
+- **Сотрудник поддержки** (`isSupportStaff`): клиентский чат не открывается — виджет
+  ведёт в Admin Panel (`NEXT_PUBLIC_ADMIN_URL` + `/support`), чтобы не смешивать роли
+  агента и клиента в одном аккаунте.
 
 ---
 
