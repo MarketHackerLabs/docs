@@ -55,8 +55,9 @@ clients → FastAPI modules/support (REST + WS + Telegram webhook)
 | Отпустить / открепить | `POST .../unassign` | `assign` |
 
 Optimistic claim: `UPDATE … WHERE assignee_id IS NULL`.  
-Забрать у другого агента — через `assign` на себя (Admin UI с подтверждением).  
-Открепить чужое назначение — `unassign` при праве `assign` (или superuser).
+Забрать у другого агента — `POST …/claim` (force, если уже назначен) или `assign` на себя.  
+Открепить чужое назначение — `unassign` при праве `assign` (или superuser).  
+Суперпользователей нельзя добавить в staff grants.
 
 ---
 
@@ -111,6 +112,14 @@ Control: `ping`/`pong`, `subscribe`/`unsubscribe`/`subscribed`, `error`.
 Очистка клиентских чатов у staff (одноразово):  
 `uv run python scripts/purge_support_staff_customer_chats.py --dry-run`  
 затем без `--dry-run`.
+
+Снять grant у суперпользователей:  
+`uv run python scripts/purge_superuser_support_grants.py --dry-run`
+
+Снять assignee у бывших сотрудников:  
+`uv run python scripts/clear_orphaned_support_assignees.py --dry-run`
+
+Суперпользователей в `support_staff_grants` добавлять нельзя — доступ у них через `is_superuser`.
 
 ---
 
