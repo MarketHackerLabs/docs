@@ -214,8 +214,10 @@ WS {API}/api/v1/support/ws
 ```http
 GET /api/v1/support/unread
 POST /api/v1/support/conversations/{id}/read
-{ "messageId": "<id последнего прочитанного или null>" }
+{ "messageId": "<id последнего прочитанного или null (= до последнего в чате)>" }
 ```
+
+`system_event` в unread не входят.
 
 ---
 
