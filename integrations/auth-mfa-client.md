@@ -51,7 +51,7 @@
 {
   "error": {
     "code": "MFA_REQUIRED",
-    "message": "Multi-factor authentication required",
+    "message": "Введите код из приложения для подтверждения входа",
     "details": {
       "mfaToken": "<короткоживущий JWT challenge, ~5 мин>"
     }
