@@ -259,7 +259,7 @@ const hasExtension = planHasFeature(me?.session.planFeatures, PLAN_FEATURE_BROWS
 
 **Monthly-ответ:** метрики с `MetricDelta` (`value`, `previous`, `diff`, `diffPercent`) — `frequency`, `ctr`, конверсии, `orders`, `avgFrequency`, `subjectsWithOrders`, `topOrderSubject`. CTR = `openToCard` / `frequency` × 100.
 
-**Frequency-trends:** `query` (обязательный), `series` (`days_30` по умолчанию | `months_12`). Ответ: `yesterday`, `latestMonth.frequency` (`MetricDelta` из WB `frequency`/`frequency_prev`), dense `points` (`frequency: null` на пропуски), `granularity` = `day`|`month`. Без данных по query — `404` (`NOT_FOUND`), как у monthly. Значения только из готовых агрегатов WB (`interval=yesterday` / `month`), без суммирования дневных в месячные.
+**Frequency-trends:** `query` (обязательный), `series` (`days_30` по умолчанию | `months_12`). Ответ: `yesterday`, `latestMonth.frequency` (`MetricDelta` из WB `frequency`/`frequency_prev`), dense `points` (`frequency: null` на пропуски), `granularity` = `day`|`month`. Без данных по query — `404` (`NOT_FOUND`), как у monthly. Значения только из готовых агрегатов WB (`interval=yesterday` / `month`), без суммирования дневных в месячные. Для `months_12`: WB `month` — скользящие ~30 дней; в бакет календарного месяца берётся последнее окно с `period_start` в этом месяце (`toStartOfMonth` + `argMax` по `(period_start, parsed_at)`).
 
 Пример:
 
