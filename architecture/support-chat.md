@@ -107,6 +107,9 @@ Control: `ping`/`pong`, `subscribe`/`unsubscribe`/`subscribed`, `error`.
 Фильтр «Мои чаты» → `assignee=me`.  
 Фильтр по тегам → `tag_id=<uuid>` (повтор параметра для нескольких; OR — чат с любым из выбранных). Совместим с `status` / `assignee` / `q` / `priority` / `source`.
 
+В инбоксе: опция «Поднимать чаты с новыми сообщениями» (localStorage, по умолчанию вкл.) —
+при `message_created` чат уходит в начало списка.
+
 Индекс: `ix_support_conv_tags_tag_id` на `support_conversation_tags(tag_id)`.
 
 Очистка клиентских чатов у staff (одноразово):  
