@@ -70,9 +70,27 @@ Optimistic claim: `UPDATE … WHERE assignee_id IS NULL`.
 
 ## Realtime
 
-WS: `/api/v1/support/ws?access_token=…`  
-События: `message.created|updated`, `conversation.updated|assigned|created`, `unread.updated`.  
-Системные события пишутся в сообщения (`content_type=system_event`) с `actor` (id/email/name).  
+WS: `/api/v1/support/ws` (Bearer предпочтительно; query `access_token` — fallback).
+
+**Публичный протокол v1** — единый envelope `{ v, event, ts, requestId, correlationId, payload }`.  
+Доменные события на wire:
+
+- `conversation.updated` — единственный sync треда (`conversation` + опционально `message` + `change.kind`)
+- `unread.updated` — персональные счётчики
+
+Control: `ping`/`pong`, `subscribe`/`unsubscribe`/`subscribed`, `error`.
+
+Внутренние audit (`system_event` в БД) **не** являются отдельными WS `event`; они могут приезжать staff-only внутри `payload.message`. Клиенту `message` с `system_event` не отдаётся.
+
+Маппинг: `PublicWsEventMapper` (`modules/support/infrastructure/ws_protocol.py`) → Redis `support:events` с `_routing` → fanout в `api/ws.py` (strip `_routing`).
+
+Правила добавления событий:
+
+1. Не публиковать сырые dict из сервиса — только через mapper.
+2. Новое доменное изменение → расширить `change.kind` или additive поля в payload при том же `v`.
+3. Rename/remove/смена семантики → bump `v`.
+4. Внутренние DomainEvent не должны автоматически становиться WS event.
+
 Звук уведомления — Web Audio на клиенте (админка / виджет).
 
 ---

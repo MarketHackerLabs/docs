@@ -16,7 +16,7 @@ OpenAPI: `{API}/docs` (tag `support`)
 `closed` / «Решено» только убирает из очереди агентов; следующее сообщение клиента снова открывает тот же чат.  
 `source` — откуда открыли/написали, не отдельная ветка.
 
-Системные события (claim, теги и т.п.) клиенту в ленте не отдаются.
+Системные события (claim, теги и т.п.) клиенту в ленте не отдаются (ни REST, ни WebSocket `message`).
 
 ---
 
@@ -79,22 +79,120 @@ URL: `GET /support/attachments/{id}/url` → для local storage вернёт `
 
 ---
 
-## 5. WebSocket
+## 5. WebSocket (протокол v1)
 
 ```
-WS {API}/api/v1/support/ws?access_token=<token>
+WS {API}/api/v1/support/ws
 ```
+
+Авторизация: предпочтительно `Authorization: Bearer <accessToken>` при handshake.  
+Допускается query `?access_token=` (менее безопасно — утечки в логах/Referer).  
+Ошибка auth → закрытие с кодом `4401` до `accept`.
+
+### Единый envelope
+
+Все кадры (C→S и S→C):
 
 ```json
-{ "type": "subscribe", "conversationId": "..." }
-{ "type": "ping" }
+{
+  "v": 1,
+  "event": "conversation.updated",
+  "ts": "2026-07-28T06:00:00.000Z",
+  "requestId": null,
+  "correlationId": null,
+  "payload": {}
+}
 ```
 
-События: `message.created`, `message.updated`, `conversation.updated`, `unread.updated`.  
-Отправка только через REST. Ping ~25 с. После reconnect — subscribe + догрузка истории.
+- `v` — обязателен, только `1`. Иначе `event: "error"`.
+- `event` — имя события (не `type`).
+- Доменные данные только в `payload`.
+- `requestId` — клиент может передать на C→S; сервер echo в ответе.
 
-Клиенту `message.created` приходит без subscribe, если он владелец чата (`customerUserId`).  
-`unread.updated` — персонально по `userId`.
+Обратная совместимость со старым `{ "type": "..." }` **не поддерживается**.
+
+### Client → Server
+
+| event | payload |
+|-------|---------|
+| `ping` | `{}` |
+| `subscribe` | `{ "conversationId": "<uuid>" }` |
+| `unsubscribe` | `{ "conversationId": "<uuid>" }` |
+
+Отправка сообщений и смена статуса — **только REST**. Ping ~25 с.
+
+### Server → Client (control)
+
+| event | payload |
+|-------|---------|
+| `pong` | `{}` |
+| `subscribed` | `{ "conversationId": "<uuid>" }` |
+| `error` | `{ "code": "PERMISSION_DENIED" \| "VALIDATION_ERROR" \| "NOT_FOUND" \| "UNAUTHORIZED", "message": "...", "details": null }` |
+
+Неуспешный `subscribe` → `error`, локальную подписку ставить только после `subscribed`.
+
+### Server → Client (domain)
+
+Только два события:
+
+#### `conversation.updated`
+
+```json
+{
+  "v": 1,
+  "event": "conversation.updated",
+  "ts": "...",
+  "requestId": null,
+  "correlationId": "...",
+  "payload": {
+    "conversation": { "...ConversationDTO без notes и unreadCount..." },
+    "message": null,
+    "change": { "kind": "message_created" }
+  }
+}
+```
+
+- `conversation` — всегда.
+- `message` — опционально (новое / edit / delete / system_event для staff).
+- `change.kind`: `created` | `message_created` | `message_updated` | `assigned` | `unassigned` | `status` | `priority` | `tags` | `closed` | `reopened`.
+
+Клиент: merge `conversation`; если есть `message` и открыт этот чат — upsert в ленту по `id` (учитывать `deletedAt`).
+
+Владелец чата получает события без `subscribe`.  
+`system_event` в `message` приходит **только сотрудникам**; клиент получает тот же кадр с `message: null`.
+
+#### `unread.updated`
+
+```json
+{
+  "v": 1,
+  "event": "unread.updated",
+  "payload": {
+    "total": 2,
+    "conversations": [{ "conversationId": "...", "count": 2 }]
+  }
+}
+```
+
+Персонально текущему пользователю.
+
+### После reconnect
+
+1. Переподключиться и снова `subscribe`.
+2. Догрузить историю сообщений и unread через REST.
+
+### Пример кадра
+
+```json
+{
+  "v": 1,
+  "event": "ping",
+  "ts": "2026-07-28T06:00:00.000Z",
+  "requestId": "req-1",
+  "correlationId": null,
+  "payload": {}
+}
+```
 
 ---
 
@@ -152,6 +250,17 @@ async function openChat(token: string) {
     body: JSON.stringify({ source: "browser_extension" }),
   });
   return (await res.json()).data;
+}
+
+function wsFrame(event: string, payload: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    v: 1,
+    event,
+    ts: new Date().toISOString(),
+    requestId: null,
+    correlationId: null,
+    payload,
+  });
 }
 ```
 
