@@ -120,7 +120,10 @@
 | POST | `/api/v1/billing/webhooks/yookassa` | IP | Webhook ЮKassa |
 | POST | `/api/v1/billing/webhooks/stripe` | Signature | Webhook Stripe |
 
-> Подробнее: [Биллинг и оплата](./billing.md)
+> Подробнее: [Биллинг и оплата](./billing.md).
+> Поле `marketing` на `GET /billing/plans` (бейдж, highlights, иконки) и каталог
+> ключей иконок для клиентов (Team / extension) — раздел
+> [Визуальные фичи карточки (marketing)](./billing.md#визуальные-фичи-карточки-marketing).
 
 #### Заголовок `X-MarketHacker-Client`
 
@@ -412,6 +415,13 @@ FastAPI: `response_model_by_alias=True` на уровне приложения. 
 # В extension-chrome
 npx openapi-typescript https://api.markethacker.ru/openapi.json -o src/api/schema.d.ts
 ```
+
+### Marketing-иконки тарифов
+
+Каталог тарифов (`GET /billing/plans`) может содержать `marketing.highlights[].icon` —
+строковый ключ из фиксированного whitelist (`users`, `sparkles`, `puzzle`, …).
+Таблица ключей, пример маппинга и правила fallback:
+[Визуальные фичи карточки (marketing)](./billing.md#визуальные-фичи-карточки-marketing).
 
 ### API client в extension
 

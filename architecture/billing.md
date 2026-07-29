@@ -562,9 +562,155 @@ sequenceDiagram
 
 Каталог для админ-панели: `GET /admin/billing/features` (`domain/features.py`).
 
+### Визуальные фичи карточки (marketing)
+
+Отдельно от entitlement-ключей. Поле `billing_plans.marketing` (JSONB) — бейдж,
+подзаголовок, `sort_order` и упорядоченный список highlights (title / description / icon).
+
+| Назначение | Entitlement `features` | Marketing |
+|------------|------------------------|-----------|
+| Влияет на доступ | да | нет |
+| Редактируется в админке | «Возможности тарифа» | «Визуальные фичи карточки» |
+| Публичный API | `features` | `marketing` на `GET /billing/plans` |
+| Потребитель | guards / effective plan | карточки тарифов в Team (и при необходимости — extension) |
+
+Если `highlights` пуст / `marketing` = `null`, Team собирает пункты из лимитов и
+entitlement-ключей (fallback). Extension при подключении marketing должен делать
+то же или скрывать блок.
+
+Каталог тарифов кэшируется в Redis (`billing:plans`, TTL 1 ч, SWR 2 ч).
+Мутации через админку инвалидируют кэш сами. После деплоя миграции
+`marketing` на прод **обязательно** инвалидировать namespace
+`billing:plans` (Admin → Cache → invalidate или
+`POST /api/v1/admin/cache/invalidate`), иначе до истечения TTL клиенты
+могут получать старый payload без поля `marketing`.
+
+#### Форма `marketing` в API (camelCase)
+
+Источник истины на бэкенде: `domain/plan_marketing.py`, схемы —
+`billing/api/schemas.py` (`PlanMarketing`, `PlanMarketingHighlight`).
+
+```json
+{
+  "badge": "Рекомендуем",
+  "subtitle": "Для команд и активного роста",
+  "sortOrder": 2,
+  "highlights": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "title": "Команда без ограничений",
+      "description": "Приглашайте участников и раздавайте доступы",
+      "icon": "users"
+    }
+  ]
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+|------|-----|----------------|----------|
+| `badge` | `string \| null` | нет | Текст бейджа на карточке (например «Рекомендуем») |
+| `subtitle` | `string \| null` | нет | Короткий подзаголовок под названием тарифа |
+| `sortOrder` | `number` | нет (по умолчанию `0`) | Порядок карточки в каталоге (меньше — раньше) |
+| `highlights` | `array` | нет (по умолчанию `[]`) | Упорядоченный список визуальных пунктов |
+| `highlights[].id` | `string` | да (генерируется, если не передан) | Стабильный id пункта |
+| `highlights[].title` | `string` | да | Заголовок пункта (1…120 символов) |
+| `highlights[].description` | `string \| null` | нет | Пояснение (до 500 символов) |
+| `highlights[].icon` | `string` | да | Ключ из каталога иконок (см. ниже) |
+
+Публичный эндпоинт: `GET /api/v1/billing/plans` (опционально
+`X-MarketHacker-Client` / `?client=`). Поле `marketing` приходит на каждом плане.
+
+Админский справочник ключей (для UI редактора, не обязателен клиентам):
+`GET /api/v1/admin/billing/marketing-icons`.
+
+#### Каталог иконок (`highlights[].icon`)
+
+Фиксированный whitelist. Новые ключи — только через изменение
+`MARKETING_ICON_CATALOG` в `domain/plan_marketing.py` + обновление маппинга
+на всех клиентах. Произвольные URL / emoji / неизвестные строки API отклоняет.
+
+| Ключ | Смысл (админка) | Рекомендуемый UI |
+|------|-----------------|------------------|
+| `users` | Команда | иконка людей / команды |
+| `building` | Организации | здание / офис |
+| `chart` | Аналитика | график / барчарт |
+| `tag` | Поиск / теги | тег / метка |
+| `zap` | Скорость | молния |
+| `sparkles` | Премиум | блёстки / sparkles |
+| `crown` | Топ | корона |
+| `shield` | Безопасность | щит |
+| `search` | Поиск | лупа |
+| `puzzle` | Расширение | пазл |
+| `headphones` | Поддержка | наушники |
+| `rocket` | Рост | ракета |
+
+#### Как использовать на клиенте (Team / extension)
+
+1. Запросить каталог: `GET /api/v1/billing/plans` (для extension —
+   `X-MarketHacker-Client: browser_extension`, если нужна фильтрация видимости).
+2. Для выбранного плана взять `plan.marketing`.
+3. Отсортировать планы по `marketing.sortOrder` (бэкенд уже сортирует каталог;
+   локально — при своей выборке).
+4. Отрисовать `highlights` в порядке массива.
+5. Маппить `icon` → компонент иконки своего UI-kit (в Team — lucide; в
+   extension — свой набор). **Не** подставлять произвольный SVG с сервера.
+
+Пример маппинга (TypeScript):
+
+```ts
+type MarketingIconKey =
+  | "users"
+  | "building"
+  | "chart"
+  | "tag"
+  | "zap"
+  | "sparkles"
+  | "crown"
+  | "shield"
+  | "search"
+  | "puzzle"
+  | "headphones"
+  | "rocket";
+
+const ICON_BY_KEY: Record<MarketingIconKey, IconComponent> = {
+  users: UsersIcon,
+  building: BuildingIcon,
+  chart: ChartIcon,
+  tag: TagIcon,
+  zap: ZapIcon,
+  sparkles: SparklesIcon,
+  crown: CrownIcon,
+  shield: ShieldIcon,
+  search: SearchIcon,
+  puzzle: PuzzleIcon,
+  headphones: HeadphonesIcon,
+  rocket: RocketIcon,
+};
+
+function resolveMarketingIcon(icon: string): IconComponent {
+  return ICON_BY_KEY[icon as MarketingIconKey] ?? ICON_BY_KEY.sparkles;
+}
+```
+
+Правила для неизвестного ключа (на случай рассинхрона клиента со старым билдом):
+
+- не падать;
+- показать fallback-иконку (в Team — `sparkles` / check);
+- заголовок и описание всё равно вывести.
+
+Добавление новой иконки в продукт:
+
+1. Ключ + label в `MARKETING_ICON_CATALOG` (`plan_marketing.py`).
+2. Маппинг в admin-panel (`marketing-icons.tsx`), Team
+   (`billing-workspace.tsx`) и extension.
+3. Деплой бэкенда раньше или одновременно с клиентами (иначе старые клиенты
+   уйдут в fallback).
+
 ### Админ-панель
 
 Управление промокодами: **Биллинг → Промокоды** (`/billing/promo-codes`).
+Тарифы: **Биллинг → Тарифы** (`/billing/plans`), создание/редактирование —
+отдельные страницы `/billing/plans/new` и `/billing/plans/{id}`.
 
 > **Не путать:** продуктовые баннеры Manager Portal — отдельный модуль
 > [`promotions`](./product-promotions.md) (UI: **Продвижение → Баннеры**), не промокоды.
