@@ -18,7 +18,11 @@ OpenAPI: `{API}/docs` (tag `support`)
 `closed` / «Решено» только убирает из очереди агентов; следующее сообщение клиента снова открывает тот же чат.  
 `source` — откуда открыли/написали, не отдельная ветка.
 
-Системные события (claim, теги и т.п.) клиенту в ленте не отдаются (ни REST, ни WebSocket `message`).
+Системные **события** audit (`contentType: "system_event"` — claim, теги и т.п.) клиенту
+в ленте не отдаются (ни REST, ни WebSocket `message`).
+
+Автоответ вне часов: `senderType: "system"`, `contentType: "text"` — **видимое** сообщение
+в чате (REST и WS). Не путать с `system_event`.
 
 ---
 
@@ -161,7 +165,8 @@ WS {API}/api/v1/support/ws
 Клиент: merge `conversation`; если есть `message` и открыт этот чат — upsert в ленту по `id` (учитывать `deletedAt`).
 
 Владелец чата получает события без `subscribe`.  
-`system_event` в `message` приходит **только сотрудникам**; клиент получает тот же кадр с `message: null`.
+`system_event` в `message` приходит **только сотрудникам**; клиент получает тот же кадр с `message: null`.  
+Автоответ (`senderType: "system"`, `contentType: "text"`) клиенту в `message` **приходит**.
 
 #### `unread.updated`
 
@@ -219,11 +224,63 @@ POST /api/v1/support/conversations/{id}/read
 { "messageId": "<id последнего прочитанного или null (= до последнего в чате)>" }
 ```
 
-`system_event` в unread не входят.
+`system_event` в unread не входят. Автоответ (`system` + `text`) входит.
 
 ---
 
-## 8. Для агентов
+## 8. Объявление в шапке
+
+```http
+GET /api/v1/support/announcements/pinned
+```
+
+Любой авторизованный пользователь. Ответ:
+
+```ts
+type SupportAnnouncement = {
+  id: string;
+  body: string;
+  isActive: boolean;
+  isPinned: boolean;
+  sortOrder: number;
+  createdById: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+// data: SupportAnnouncement | null
+```
+
+`null` — закреплённого активного объявления нет. Показывать в шапке чата (как в Manager Portal).
+
+---
+
+## 9. Статус часов работы
+
+```http
+GET /api/v1/support/hours/status
+```
+
+```ts
+type SupportHoursInterval = { start: string; end: string }; // "09:00", "18:00"
+
+type SupportHoursStatus = {
+  scheduleEnabled: boolean;
+  isOpen: boolean;
+  timezone: string;
+  todayKey: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun" | null;
+  todayIntervals: SupportHoursInterval[];
+};
+```
+
+- `scheduleEnabled: false` — расписание выключено; строку «Работаем / Не работаем» не показывать.
+- `scheduleEnabled: true` — показать статус по `isOpen` и интервалам `todayIntervals` на текущий день (в `timezone`), например:
+  - открыто: `Работаем · 09:00–18:00`
+  - закрыто с интервалом: `Не работаем · сегодня 09:00–18:00`
+  - выходной: `Не работаем · сегодня выходной`
+
+---
+
+## 10. Для агентов
 
 | Действие | Метод |
 |----------|--------|
@@ -239,7 +296,7 @@ POST /api/v1/support/conversations/{id}/read
 
 ---
 
-## 9. Пример
+## 11. Пример
 
 ```typescript
 const API = "https://api.example.com/api/v1";

@@ -13,7 +13,8 @@
 - **Один assignee** на чат. Если назначен — отвечать может только он. Свободный чат: первый ответ агента берёт чат себе.
 - **Сотрудник = клиент**: в своём чате (`customer_user_id == me`) пишет как `customer`, даже с grant поддержки.
 - Текст + картинки (jpeg/png/webp/gif ≤ 10 МБ). Без HTML.
-- Внутренние заметки и лог действий (system_event) клиенту не отдаются.
+- Внутренние заметки и лог действий (`system_event`) клиенту не отдаются.
+- Автоответ вне часов: `sender_type=system`, `content_type=text` — виден клиенту; не путать с audit `system_event`.
 - Теги — справочник в БД, CRUD любым сотрудником поддержки.
 
 Клиенты: Manager Portal (виджет), Admin Panel (инбокс), Extension (по [интеграции](../integrations/support-client.md)), Telegram (webhook).
@@ -29,7 +30,7 @@ clients → FastAPI modules/support (REST + WS + Telegram webhook)
 
 Код: `SupportService` + `SupportAccess` + `SupportRepository` + `SupportRealtimeBroker`.
 
-Миграции: `20260720_0030` (схема), `0031` (без org), `0032` (один чат на customer), `0033` (индекс тегов для фильтра).
+Миграции: `20260720_0030` (схема), `0031` (без org), `0032` (один чат на customer), `0033` (индекс тегов для фильтра), `0039` (объявления, `support_settings`, автоответы).
 
 ---
 
@@ -102,7 +103,11 @@ Control: `ping`/`pong`, `subscribe`/`unsubscribe`/`subscribed`, `error`.
 
 - `/support` — инбокс, ответ, теги, приоритет, заметки, лог, claim/transfer/reclaim/unassign
 - `/support/staff` — гранты (модалка), удаление
-- `/support/settings` — Telegram (токен в env)
+- `/support/announcements` — CRUD объявлений; одно закреплённое (`is_pinned` + `is_active`) в шапке виджета Portal
+- `/support/settings` — вкладки Telegram | Режим работы (`SupportSettingsNav`)
+  - Telegram: флаги в `platform_settings` (токен в env)
+  - Режим работы: часы в `support_settings.business_hours` + шаблон автоответа `off_hours`
+  (в UI один переключатель «Автоответ в нерабочее время» синхронизирует `businessHours.enabled` и `autoReply.isActive`)
 
 Фильтр «Мои чаты» → `assignee=me`.  
 Фильтр по тегам → `tag_id=<uuid>` (повтор параметра для нескольких; OR — чат с любым из выбранных). Совместим с `status` / `assignee` / `q` / `priority` / `source`.
@@ -126,11 +131,42 @@ Control: `ping`/`pong`, `subscribe`/`unsubscribe`/`subscribed`, `error`.
 
 ---
 
+## Объявления, часы работы, автоответчик
+
+**Объявления** (`support_announcements`): CRUD при `support:settings:manage`.  
+`GET /support/announcements/pinned` — любой auth; только активное закреплённое. Показ — шапка виджета Manager Portal.
+
+**Часы работы** — singleton `support_settings` (id=1), поле `business_hours` JSONB.  
+Не хранятся в `platform_settings`. Чтение/запись через `GET/PATCH /support/settings` (`businessHours`).
+
+```json
+{
+  "enabled": false,
+  "timezone": "Europe/Moscow",
+  "schedule": {
+    "mon": [{"start": "09:00", "end": "18:00"}],
+    "sat": [],
+    "sun": []
+  }
+}
+```
+
+Если `enabled=false` — считаем всегда открыто. Пустой список интервалов на день = выходной.
+
+**Автоответчик** (`support_auto_replies`): шаблоны по `trigger_key`. Сейчас `off_hours`.  
+Провайдеры: `OffHoursAutoReplyProvider` → `CompositeAutoReplyProvider` (точка расширения под ИИ).  
+Волна: `conversation.meta.autoReply.off_hours.suppressUntilAgent` — один ответ до ответа агента.  
+Хук после входящего от `customer`/`channel` (REST и Telegram).
+
+API: `GET/PATCH /support/auto-replies/{trigger_key}`.
+
+---
+
 ## Manager Portal
 
 Плавающий виджет справа внизу. `/support` редиректит на dashboard.
 
-- **Клиент** (без grant поддержки): чат + WS (бейдж непрочитанных + звук).
+- **Клиент** (без grant поддержки): чат + WS (бейдж непрочитанных + звук); закреплённое объявление в шапке; статус «Работаем / Не работаем» и интервал на сегодня (`GET /support/hours/status`), если расписание включено.
 - **Сотрудник поддержки** (`isSupportStaff`): клиентский чат не открывается — виджет
   ведёт в Admin Panel (`NEXT_PUBLIC_ADMIN_URL` + `/support`), чтобы не смешивать роли
   агента и клиента в одном аккаунте.
