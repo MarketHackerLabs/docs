@@ -208,10 +208,12 @@ Query списка: `page`, `pageSize`, `status`, `marketplace`, `search` (email
 
 Адаптер повторяет поток сайта, не seller API:
 
-1. `nm` → `root` (imt): `GET https://card.wb.ru/cards/v4/detail?...&nm={nm}`.
-2. Хост отзывов: `GET https://feedback-bt.wildberries.ru/feedback/api/v2/host?imt={root}` → `https://feedback-view-NN.wb.ru`.
-3. Отзывы: `GET {host}/feedbacks/v2/{root}` (параметр — **imt**). Публично ~до 1000 отзывов на карточку; фильтр по запрошенным nm.
-4. Вопросы: `https://questions.wildberries.ru/api/v1/questions?imtId={root}`.
+1. `nm` → `imt_id`: basket CDN `GET https://{host}/vol{vol}/part{part}/{nm}/info/ru/card.json`
+   (`vol = nm // 100000`, `part = nm // 1000`; host из `cdn.wbbasket.ru/api/v3/upstreams` →
+   `origin.mediabasket_route_map`, fallback — `shard-list.json` / статическая таблица диапазонов).
+2. Хост отзывов: `GET https://feedback-bt.wildberries.ru/feedback/api/v2/host?imt={imt}` → `https://feedback-view-NN.wb.ru`.
+3. Отзывы: `GET {host}/feedbacks/v2/{imt}` (параметр — **imt**). Публично ~до 1000 отзывов на карточку; фильтр по запрошенным nm.
+4. Вопросы: `https://questions.wildberries.ru/api/v1/questions?imtId={imt}`.
 5. Медиа: `photos[]`, `video`; legacy `photo` учитывается.
 
 Fallback-хосты: `feedbacks1.wb.ru`, `feedbacks2.wb.ru`.
