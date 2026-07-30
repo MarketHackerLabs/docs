@@ -80,7 +80,7 @@ sequenceDiagram
 
 | Поле | Тип | Обязательный | Описание |
 |------|-----|--------------|----------|
-| `marketplace` | string | да | Сейчас: `wb`. `ozon` — пока недоступен |
+| `marketplace` | string | да | `wb` или `ozon` |
 | `nomenclatures` | number[] | да | 1…50 артикулов |
 | `organizationId` | uuid \| null | нет | Нужен при неоднозначном seat (иначе 409) |
 | `sampleSize` | number \| null | нет | Размер выборки; иначе default из настроек |
@@ -218,12 +218,73 @@ Query списка: `page`, `pageSize`, `status`, `marketplace`, `search` (email
 
 Fallback-хосты: `feedbacks1.wb.ru`, `feedbacks2.wb.ru`.
 
+## Ozon (публичный источник)
+
+Seller API не подходит: нужны отзывы любого товара, не только своего кабинета.
+
+Адаптер ходит в публичный composer-api витрины:
+
+1. Отзывы: `GET .../page/json/v2?url=/product/{id}/reviews/?sort=published_at_desc&page=1`
+   Пагинация: не наращивать `page` вручную — без `page_key` виджет `webListReviews` пропадает.
+   Следующая страница — из `paging.nextButton` (например `?page=2&page_key=...&sort=published_at_desc`).
+2. Вопросы: `.../questions/?page={n}` (`paging.type=loadMore`, `page` без `page_key` работает).
+3. Виджеты: `webListReviews-*`, `webListQuestions-*` в `widgetStates` (значение — JSON-строка или объект).
+
+Маппинг в канон:
+
+| Ozon | Review / Question |
+|------|-------------------|
+| `uuid` / `id` | `comment_id` / `question_id` |
+| `itemId` | `nomenclature` |
+| `content.score` | `product_valuation` |
+| `content.comment` / `positive` / `negative` | текст / pros / cons |
+| `publishedAt` (unix) | `feedback_date` ISO |
+| ответы продавца в `comments.list` | `answer_text` |
+
+Антибот (Variti): обычный Python TLS (`httpx`) даёт `307`/`403` даже с валидной cookie —
+отсев по отпечатку клиента. Адаптер ходит через `curl_cffi` с impersonate Chrome и
+следует редиректам `__rr=N`.
+
+Настройки:
+
+- `OZON_COMPOSER_COOKIE` — Cookie-строка витрины (одна строка в кавычках в `.env`)
+- `OZON_HTTP_PROXY_URL` — опциональный HTTP-прокси; env `HTTP_PROXY`/`HTTPS_PROXY` намеренно не читаются (`trust_env=false`)
+
+### Какие cookies нужны
+
+Снимать лучше заголовок `Cookie` с **успешного** (`200`) запроса
+`/api/composer-api.bx/page/json/v2` (DevTools → Network), а не «все cookies домена наугад».
+Туда попадут и HttpOnly.
+
+| Cookie | Роль | Обязательность | Срок (ориентир) |
+|--------|------|----------------|-----------------|
+| `abt_data` | антибот Variti | **критично** — без неё типичен `307` | короткий: часы…дни; «хрупкая», часто протухает первой |
+| `rfuid` | антибот / device fingerprint | **критично** — без неё типичен `307` | короткий / средний |
+| `__Secure-access-token` | сессия витрины | нужна для стабильной сессии | дни…недели; в значении есть метка выдачи |
+| `__Secure-refresh-token` | обновление сессии | желательна вместе с access | как у access |
+| `xcid` | client id витрины | желательна | долгая |
+| `__Secure-ext_xcid` | связанный client id | желательна | долгая |
+| `__Secure-ETC` | edge/client token | желательна; в Set-Cookie встречался срок ~1 год | долгая (~год) |
+| `__Secure-user-id` | id пользователя (`0` = гость) | необязательна сама по себе | как сессия |
+| `__Secure-ab-group` | A/B | не критична | долгая |
+| `is_cookies_accepted` | согласие на cookies | не критична | долгая |
+| `ADDRESSBOOKBAR_*` и прочий UI | виджеты витрины | не нужны для composer-api | разные |
+
+Практичный минимум для `OZON_COMPOSER_COOKIE`: `abt_data` + `rfuid` + access/refresh + `xcid`/`__Secure-ETC`.
+Полная строка с успешного composer-запроса предпочтительнее ручной «сборки».
+
+Точные `Expires` / `Max-Age` — в браузере: Application → Cookies → `ozon.ru`.
+При массовых `ozon_composer.antibot` в логах — обновить cookie (и при необходимости прокси с тем же egress, с которого снимали сессию).
+
+Идентификатор номенклатуры — storefront `product_id` / `itemId` (целое число, совместимо с `nomenclatures[]`).
+
 ## Ограничения
 
 - До 5000 отзывов на анализ (настраивается, потолок 5000).
 - Несколько номенклатур с первого дня.
-- Marketplace-agnostic канон Review/Question; сейчас WB, Ozon — stub ошибки.
+- Marketplace-agnostic канон Review/Question; адаптеры WB и Ozon.
 - WB публично отдаёт срез (~1000) отзывов по imt — полный `feedbackCount` с карточки больше.
+- Ozon: нужны cookie витрины (`abt_data`/`rfuid` критичны) + Chrome TLS; без актуальной сессии — ошибка пользователю.
 
 ## Масштабирование
 
