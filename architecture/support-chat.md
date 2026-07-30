@@ -176,8 +176,13 @@ API: `GET/PATCH /support/auto-replies/{trigger_key}`.
 ## Telegram
 
 Env: `SUPPORT_TELEGRAM_BOT_TOKEN`, `SUPPORT_TELEGRAM_WEBHOOK_SECRET`,  
-`SUPPORT_TELEGRAM_API_BASE_URL` / `SUPPORT_TELEGRAM_FILE_BASE_URL` (прокси).  
+`TELEGRAM_API_BASE_URL` / `TELEGRAM_FILE_BASE_URL` (общий прокси Bot API).  
 Webhook: `POST /support/channels/telegram/webhook`.
+
+Ops-уведомления (отдельный бот, супергруппа с топиками):  
+`NOTIFY_TELEGRAM_BOT_TOKEN`, `NOTIFY_TELEGRAM_ENABLED`, `NOTIFY_TELEGRAM_CHAT_ID`,  
+`NOTIFY_TELEGRAM_PAYMENTS_TOPIC_ID`, `NOTIFY_TELEGRAM_SUPPORT_TOPIC_ID`.  
+Триггеры: успешная активация оплаты (без `admin_test`); входящие `customer` / `channel`.
 
 ---
 
