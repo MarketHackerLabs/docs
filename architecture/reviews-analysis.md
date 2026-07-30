@@ -80,7 +80,7 @@ sequenceDiagram
 
 | Поле | Тип | Обязательный | Описание |
 |------|-----|--------------|----------|
-| `marketplace` | string | да | `wb` или `ozon` |
+| `marketplace` | string | да | Сейчас: `wb`. `ozon` — создание временно отключено (антибот на DC IP) |
 | `nomenclatures` | number[] | да | 1…50 артикулов |
 | `organizationId` | uuid \| null | нет | Нужен при неоднозначном seat (иначе 409) |
 | `sampleSize` | number \| null | нет | Размер выборки; иначе default из настроек |
@@ -284,7 +284,7 @@ Seller API не подходит: нужны отзывы любого това�
 - Несколько номенклатур с первого дня.
 - Marketplace-agnostic канон Review/Question; адаптеры WB и Ozon.
 - WB публично отдаёт срез (~1000) отзывов по imt — полный `feedbackCount` с карточки больше.
-- Ozon: нужны cookie витрины (`abt_data`/`rfuid` критичны) + Chrome TLS; без актуальной сессии — ошибка пользователю.
+- Ozon: адаптер есть, но **создание анализа временно отключено** (Variti на типичном DC IP режет composer-api даже с cookie с той же машины).
 
 ## Масштабирование
 
