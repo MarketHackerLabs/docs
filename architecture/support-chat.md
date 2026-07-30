@@ -182,6 +182,8 @@ Webhook: `POST /support/channels/telegram/webhook`.
 Ops-уведомления (отдельный бот, супергруппа с топиками):  
 `NOTIFY_TELEGRAM_BOT_TOKEN`, `NOTIFY_TELEGRAM_ENABLED`, `NOTIFY_TELEGRAM_CHAT_ID`,  
 `NOTIFY_TELEGRAM_PAYMENTS_TOPIC_ID`, `NOTIFY_TELEGRAM_SUPPORT_TOPIC_ID`.  
+Deep-links в кнопках: `ADMIN_PANEL_URL` (`/support?c=…`, `/users/…`).  
+Формат: HTML (`parse_mode`), expandable blockquote, inline keyboard.  
 Триггеры: успешная активация оплаты (без `admin_test`); входящие `customer` / `channel`.
 
 ---
