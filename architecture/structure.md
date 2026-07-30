@@ -21,6 +21,7 @@ backend/
 │           ├── organizations/
 │           ├── marketplace_accounts/
 │           ├── search_tags/
+│           ├── reviews_analysis/
 │           ├── billing/
 │           ├── promotions/
 │           ├── partners/
@@ -82,6 +83,7 @@ flowchart BT
 | `organizations` | CRUD организаций, роли, приглашения, membership |
 | `marketplace_accounts` | Привязка WB/Ozon, хранение credentials |
 | `search_tags` | Поисковые запросы WB (ClickHouse, read-only) |
+| `reviews_analysis` | AI-анализ отзывов/вопросов (fetch с MP, без хранения отзывов) |
 | `billing` | Подписки, тарифы, лимиты, промокоды, ЮKassa/Stripe |
 | `promotions` | Продуктовые баннеры / CTA в клиентах платформы |
 | `partners` | Партнёрская программа: кампании, атрибуция, комиссии |
