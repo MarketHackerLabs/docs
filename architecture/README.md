@@ -107,6 +107,7 @@ flowchart TB
 | [Дизайн API](./api-design.md) | Версионирование, эндпоинты, ошибки |
 | [Кэширование](./caching.md) | Redis response cache, `@cached_read`, области данных, инвалидация |
 | [Биллинг и оплата](./billing.md) | Подписки, промокоды, докупка лимитов, ЮKassa, webhook, фоновая сверка |
+| [Анализ отзывов](./reviews-analysis.md) | AI-анализ отзывов/вопросов, квоты, OpenRouter |
 | [Продуктовые промо](./product-promotions.md) | Баннеры / CTA в клиентах, placements, targeting |
 | [Партнёры](./partners.md) | Кампании, атрибуция, комиссии, аналитика |
 | [Фоновые задачи](./background-jobs.md) | Синхронизация с маркетплейсами |
