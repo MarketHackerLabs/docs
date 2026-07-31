@@ -62,6 +62,7 @@ sequenceDiagram
 | Шаг | Запрос | Что делать на клиенте |
 |-----|--------|------------------------|
 | Запуск | `POST .../reviews-analyses` | Сохранить `id` из `data`, открыть виджет |
+| Квота | `GET .../quota` | Показать остаток товаров за период |
 | Виджет | `GET .../active` каждые 2–5 с | Если массив не пуст — лоадер; пуст — скрыть |
 | Poll одного | `GET .../{id}` | Альтернатива active, если открыт конкретный анализ |
 | Отчёт | `GET .../{id}/result` | Только после `status === "completed"` |
@@ -92,7 +93,23 @@ sequenceDiagram
 
 Ответ: `ReviewsAnalysisSummary` (см. ниже).
 
-Лимит тарифа — число анализов за период (`max_reviews_analyses_per_period`), не стоимость/токены. При исчерпании квоты create вернёт ошибку лимита.
+Лимит тарифа — число **товаров** (артикулов) за период (`max_reviews_products_per_period`), не число запусков и не токены. Каждый артикул в запросе списывает 1 единицу, в том числе при повторном анализе того же товара. При исчерпании квоты create вернёт ошибку лимита.
+
+#### `GET /quota`
+
+Query: `organizationId` (опционально).
+
+Ответ `data`:
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `limit` | number \| null | Лимит товаров; `null` — безлимит |
+| `used` | number | Зарезервировано + списано за период |
+| `remaining` | number \| null | Остаток; `null` при безлимите |
+| `periodStart` / `periodEnd` | datetime | Границы расчётного периода |
+| `organizationId` | uuid \| null | Org seat, если применимо |
+| `quotaMode` | string | `per_member_seat` \| `shared_pool` |
+
 #### `GET /`
 
 Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опционально).
@@ -171,16 +188,21 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 ## Квоты
 
 Фича тарифа: `reviews_analysis` (`user_or_org_seat`).  
-Лимит: `max_reviews_analyses_per_period` (+ докупка add-on).
+Лимит: `max_reviews_products_per_period` (+ докупка add-on `reviews_products_per_period`).
+
+Единица списания — товар в запуске: `units = len(nomenclatures)`.  
+Повторный анализ того же артикула снова расходует лимит (каждый запуск вызывает модель).
 
 Режим в настройках раздела (`quotaMode`):
 
 | Режим | Поведение |
 |-------|-----------|
-| `per_member_seat` (default) | У каждого участника org свой лимит = лимит тарифа owner. 2 org → 2 независимых пула. |
-| `shared_pool` | Все seat-запуски едят общий пул owner. |
+| `per_member_seat` (default) | У каждого участника org свой лимит товаров = лимит тарифа owner. 2 org → 2 независимых пула. |
+| `shared_pool` | Все seat-запуски едят общий пул товаров owner. |
 
 Анализ всегда привязан к пользователю, который запустил. При неоднозначности seat нужен `organizationId` (иначе 409).
+
+Клиентский остаток: `GET /api/v1/reviews-analyses/quota?organizationId=…`.
 
 ## Настройки раздела (admin)
 

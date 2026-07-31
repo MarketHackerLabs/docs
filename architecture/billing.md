@@ -337,6 +337,7 @@ Webhook проверяет IP отправителя (диапазоны ЮKassa
 | `organizations` | `max_organizations` | user | Дополнительные организации владельца |
 | `members` | `max_members` | org | Участники команды (лимит org определяется подпиской владельца) |
 | `api_calls_per_day` | `max_api_calls_per_day` | user | Дневной лимит API-запросов |
+| `reviews_products_per_period` | `max_reviews_products_per_period` | user | Товары для анализа отзывов за период подписки |
 
 Seed-продукты (миграция `20260704_0019`):
 
