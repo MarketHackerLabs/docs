@@ -109,6 +109,7 @@ flowchart TB
 | [Биллинг и оплата](./billing.md) | Подписки, промокоды, докупка лимитов, ЮKassa, webhook, фоновая сверка |
 | [Анализ отзывов](./reviews-analysis.md) | AI-анализ отзывов/вопросов, квоты, OpenRouter |
 | [Продуктовые промо](./product-promotions.md) | Баннеры / CTA в клиентах, placements, targeting |
+| [Новости](./news.md) | Редакционный feed, прочтение, admin `news:manage` |
 | [Партнёры](./partners.md) | Кампании, атрибуция, комиссии, аналитика |
 | [Фоновые задачи](./background-jobs.md) | Синхронизация с маркетплейсами |
 | [Parser Service](./parser.md) | Платформа фоновых задач, Kafka → ClickHouse |

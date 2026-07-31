@@ -197,6 +197,17 @@ WB Gateway и организации сюда не входят — отдель
 | POST | `/api/v1/promotions/{key}/dismiss` | ✓ | Скрыть баннер |
 | CRUD | `/api/v1/admin/promotions` | superuser | Управление кампаниями |
 
+### News (новости)
+
+| Метод | Путь | Auth | Описание |
+|-------|------|:----:|----------|
+| GET | `/api/v1/news` | ✓ | Список видимых новостей |
+| GET | `/api/v1/news/{id}` | ✓ | Деталь + авто mark-read |
+| GET | `/api/v1/news/unread-count` | ✓ | Число непрочитанных |
+| POST | `/api/v1/news/{id}/read` | ✓ | Отметить прочитанной |
+| POST | `/api/v1/news/read-all` | ✓ | Отметить все видимые |
+| CRUD / publish | `/api/v1/admin/news` | `news:manage` | Управление (см. [Новости](./news.md)) |
+
 Placement: `{client}.{slot}` (`manager_portal.all` / `.dashboard` / `.team`; далее —
 `browser_extension.*`). Подробнее: [Продуктовые промо](./product-promotions.md).
 
