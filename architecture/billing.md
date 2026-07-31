@@ -90,7 +90,7 @@ sequenceDiagram
 |--------|-----|----------|
 | `sync_yookassa_payment` | defer | Сверка одного платежа через `YOOKASSA_PAYMENT_SYNC_DELAY_SECONDS` (по умолчанию 180 с) после checkout |
 | `process_pending_yookassa_payments` | cron (*/5 мин) | Сверка всех незавершённых платежей в окне возраста |
-| `process_yookassa_renewals` | cron (02:00 UTC) | Автопродление с сохранённых карт |
+| `process_yookassa_renewals` | cron (02:00 UTC) | Истечение просроченных подписок (`expired`) + автопродление с сохранённых карт |
 
 Worker должен быть запущен:
 
@@ -444,9 +444,11 @@ sequenceDiagram
 
 Cron `process_yookassa_renewals` (02:00 UTC):
 
-1. **Перед продлениями** — `expire_stale_entitlements()`: истекают entitlements с прошедшим `grace_period_end`.
-2. **Подписки** — списание с сохранённой карты; в режиме `bundled` к сумме добавляется `calculate_recurring_addon_total()`.
-3. **Докупки (только `separate`)** — `_process_limit_addon_renewals()`: отдельное списание по каждому entitlement; при неудаче — `handle_separate_renewal_failure()` → льготный период.
+1. **Истечение подписок** — `expire_stale_subscriptions()`: `active`/`trialing`/`past_due`
+   с прошедшим периодом (вне окна ретрая 48 ч или без автопродления ЮKassa) → `expired`.
+2. **Перед продлениями** — `expire_stale_entitlements()`: истекают entitlements с прошедшим `grace_period_end`.
+3. **Подписки** — списание с сохранённой карты; в режиме `bundled` к сумме добавляется `calculate_recurring_addon_total()`.
+4. **Докупки (только `separate`)** — `_process_limit_addon_renewals()`: отдельное списание по каждому entitlement; при неудаче — `handle_separate_renewal_failure()` → льготный период.
 
 Требуется `yookassa_recurrent_enabled` и сохранённая карта.
 
@@ -540,6 +542,23 @@ sequenceDiagram
 ### Trial
 
 При истечении `trial_ends_at` подписка переводится в `cancelled`, пользователь получает лимиты free-тарифа (с учётом активных бустов).
+
+### Истечение периода (`expired`)
+
+Подписки со статусом `active` / `trialing` / `past_due` и прошедшим `current_period_end`
+переводятся в `status=expired` (автопродление отключается):
+
+1. **Cron** `process_yookassa_renewals` — всегда в начале джобы (даже если recurrent выключен).
+   Учитывается окно ретрая ЮKassa (48 ч после конца периода): пока подписка ещё может
+   попасть в автопродление, статус не меняется.
+2. **Лениво** при резолве effective plan — если период уже истёк и подписка не в grace
+   отмены, статус обновляется до `expired` при следующем запросе доступа.
+
+Админка (дашборд, аналитика, счётчики) считает активными только `active` и `trialing`
+по полю `status` — после перевода в `expired` подписка больше не попадает в эти метрики.
+
+`cancelled` после конца периода остаётся `cancelled` (не путать с `expired`: отмена
+пользователем vs естественное окончание без продления).
 
 ### Отмена подписки
 
@@ -725,6 +744,8 @@ function resolveMarketingIcon(icon: string): IconComponent {
 3. В режиме `bundled` к сумме подписки добавляется стоимость активных докупок; период bundled-entitlements продлевается вместе с подпиской.
 4. В режиме `separate` докупки продлеваются отдельными платежами в том же cron; при неудаче — льготный период (см. [Докупка лимитов](#докупка-лимитов)).
 5. При неудаче оплаты подписки подписка переводится в `past_due`.
+6. После окончания периода (и окна ретрая 48 ч / при отсутствии автопродления)
+   подписка переводится в `expired` — см. [Истечение периода](#истечение-периода-expired).
 
 ## Переменные окружения
 
