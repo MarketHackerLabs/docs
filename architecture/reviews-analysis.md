@@ -93,7 +93,7 @@ sequenceDiagram
 
 Ответ: `ReviewsAnalysisSummary` (см. ниже).
 
-Лимит тарифа — число **товаров** (артикулов) за период (`max_reviews_products_per_period`), не число запусков и не токены. Каждый артикул в запросе списывает 1 единицу, в том числе при повторном анализе того же товара. При исчерпании квоты create вернёт ошибку лимита.
+Лимит тарифа — число **товаров** (артикулов) за период (`max_reviews_products_per_period`), не число запусков и не токены. Каждый артикул в запросе списывает 1 единицу, в том числе при повторном анализе того же товара. Если `units > remaining`, create отклоняется целиком (`402 PLAN_LIMIT_EXCEEDED`); частичного запуска нет.
 
 #### `GET /quota`
 
@@ -183,15 +183,34 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 | 403 | Нет доступа / раздел выключен |
 | 404 | Анализ не найден |
 | 409 | Нужен `organizationId` или результат ещё не готов |
-| 400 | Некорректный запрос (маркетплейс, nm, лимиты) |
+| 402 | Исчерпана квота товаров за период (или запрос больше остатка) |
+| 400 | Некорректный запрос (маркетплейс, nm, размер выборки) |
 
 ## Квоты
 
 Фича тарифа: `reviews_analysis` (`user_or_org_seat`).  
-Лимит: `max_reviews_products_per_period` (+ докупка add-on `reviews_products_per_period`).
+Лимит: `max_reviews_products_per_period` (+ докупка add-on `reviews_products_per_period`).  
+`null` в тарифе / в ответе `/quota` — безлимит; иначе число товаров за billing-период.
 
 Единица списания — товар в запуске: `units = len(nomenclatures)`.  
 Повторный анализ того же артикула снова расходует лимит (каждый запуск вызывает модель).
+
+### Хранение и расчёт
+
+| Величина | Источник |
+|----------|----------|
+| `limit` | `get_effective_plan().max_reviews_products_per_period` (тариф + промо + add-ons) |
+| `used` | `reviews_analysis_quota_ledger.reserved + consumed` за `period_start` |
+| `remaining` | `null` при безлимите, иначе `max(0, limit - used)` |
+
+Лимит попадает в Redis-кэш effective plan (`billing:effective_plan`, TTL 60 с / stale 5 мин) через `plan_to_dict` / `plan_from_dict`. Поле `max_reviews_products_per_period` обязательно сериализуется — иначе после первого попадания в кэш клиент видел бы ложный безлимит.
+
+### Проверка и списание
+
+1. `POST /reviews-analyses`: `resolve` (мягкая проверка) → `reserve` под `SELECT … FOR UPDATE` (жёсткая).
+2. Условие: `used + units <= limit`. При `limit is None` ограничение не действует.
+3. **All-or-nothing:** если в одном запросе товаров больше, чем `remaining`, весь запрос отклоняется с `402 PLAN_LIMIT_EXCEEDED` (частичного списания нет).
+4. Успех job → `commit` (reserved→consumed); ошибка / отмена → `release` reserved.
 
 Режим в настройках раздела (`quotaMode`):
 
@@ -203,6 +222,8 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 Анализ всегда привязан к пользователю, который запустил. При неоднозначности seat нужен `organizationId` (иначе 409).
 
 Клиентский остаток: `GET /api/v1/reviews-analyses/quota?organizationId=…`.
+
+После смены лимита в тарифе или деплоя фикса кодека кэш `billing:effective_plan:*` можно сбросить; иначе новое значение подтянется по истечении TTL/stale.
 
 ## Настройки раздела (admin)
 
