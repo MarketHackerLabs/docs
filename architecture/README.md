@@ -110,6 +110,7 @@ flowchart TB
 | [Анализ отзывов](./reviews-analysis.md) | AI-анализ отзывов/вопросов, квоты, OpenRouter |
 | [Продуктовые промо](./product-promotions.md) | Баннеры / CTA в клиентах, placements, targeting |
 | [Новости](./news.md) | Редакционный feed, прочтение, admin `news:manage` |
+| [Публичный роадмап](./public-roadmap.md) | CMS-план развития для лендинга, `roadmap:manage` |
 | [Партнёры](./partners.md) | Кампании, атрибуция, комиссии, аналитика |
 | [Фоновые задачи](./background-jobs.md) | Синхронизация с маркетплейсами |
 | [Parser Service](./parser.md) | Платформа фоновых задач, Kafka → ClickHouse |

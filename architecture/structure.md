@@ -24,6 +24,8 @@ backend/
 │           ├── reviews_analysis/
 │           ├── billing/
 │           ├── promotions/
+│           ├── news/
+│           ├── roadmap/
 │           ├── partners/
 │           ├── extension/
 │           ├── admin/
@@ -86,6 +88,8 @@ flowchart BT
 | `reviews_analysis` | AI-анализ отзывов/вопросов (fetch с MP, без хранения отзывов) |
 | `billing` | Подписки, тарифы, лимиты, промокоды, ЮKassa/Stripe |
 | `promotions` | Продуктовые баннеры / CTA в клиентах платформы |
+| `news` | Редакционный feed новостей платформы |
+| `roadmap` | Публичный роадмап продукта (лендинг и клиенты) |
 | `partners` | Партнёрская программа: кампании, атрибуция, комиссии |
 | `extension` | Entitlements и remote config браузерного расширения |
 | `admin` | Админ-панель, управление тарифами и парсером |

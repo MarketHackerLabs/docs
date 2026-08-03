@@ -44,6 +44,7 @@ MarketHacker — платформа для управления продажам
 - [Партнёры](./architecture/partners.md) — кампании, атрибуция, комиссии, аналитика
 - [Продуктовые промо](./architecture/product-promotions.md) — баннеры / CTA, placements, targeting
 - [Новости](./architecture/news.md) — редакционный feed, прочтение, admin `news:manage`
+- [Публичный роадмап](./architecture/public-roadmap.md) — CMS-план развития для лендинга, `roadmap:manage`
 - [Фоновые задачи](./architecture/background-jobs.md)
 - [Parser Service](./architecture/parser.md) — платформа фоновых задач и аналитики
 - [Разработка парсеров](./architecture/parser-development.md) — Kafka, новые парсеры, чеклист деплоя

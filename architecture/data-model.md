@@ -252,12 +252,24 @@ erDiagram
 | `product_promotions` | Кампании CTA / баннеров (`placement`, targeting, A/B) |
 | `product_promotion_dismissals` | Скрытия баннера пользователем |
 | `product_promotion_assignments` | Sticky assignment варианта A/B |
-| `news_items` | Редакционные новости платформы (статус, targeting, Markdown) |
+| `news_items` | Редакционные новости платформы (статус, Markdown) |
 | `news_item_reads` | Прочтение новости пользователем |
 
 Миграции: `20260714_0027_product_promotions`, `20260714_0028_promotion_placement_all`,
 `20260731_0042_news_items`.
 Подробнее: [Продуктовые промо](./product-promotions.md), [Новости](./news.md).
+
+### Публичный роадмап
+
+| Таблица | Назначение |
+|---------|------------|
+| `roadmap_settings` | Singleton: показ на лендинге (`is_public_enabled`) |
+| `roadmap_periods` | Периоды таймлайна |
+| `roadmap_categories` | Категории карточек |
+| `roadmap_progress_statuses` | Этапы разработки |
+| `roadmap_items` | Карточки (visibility + progress) |
+
+Миграция: `20260803_0044_public_roadmap`. Подробнее: [Публичный роадмап](./public-roadmap.md).
 
 Миграции биллинга: `20260704_0019_limit_addons`, `20260704_0020_limit_addon_billing_modes`, `20260708_0023_plan_client_visibility`.
 

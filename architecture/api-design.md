@@ -208,6 +208,14 @@ WB Gateway и организации сюда не входят — отдель
 | POST | `/api/v1/news/read-all` | ✓ | Отметить все видимые |
 | CRUD / publish | `/api/v1/admin/news` | `news:manage` | Управление (см. [Новости](./news.md)) |
 
+### Публичный роадмап
+
+| Метод | Путь | Auth | Описание |
+|-------|------|:----:|----------|
+| GET | `/api/v1/roadmap` | — | Снимок для лендинга и клиентов |
+| GET | `/api/v1/roadmap/items/{id}` | — | Деталь опубликованной карточки |
+| CRUD / publish / settings | `/api/v1/admin/roadmap` | `roadmap:manage` | Управление (см. [Публичный роадмап](./public-roadmap.md)) |
+
 Placement: `{client}.{slot}` (`manager_portal.all` / `.dashboard` / `.team`; далее —
 `browser_extension.*`). Подробнее: [Продуктовые промо](./product-promotions.md).
 
