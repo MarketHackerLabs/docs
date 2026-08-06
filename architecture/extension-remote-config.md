@@ -147,7 +147,7 @@ If-None-Match: "abc123def456..."
 
 | Уровень | Пример ключа | Правило ключа |
 |---------|--------------|---------------|
-| marketplace | `wb` | `^[a-z0-9_-]{1,64}$` |
+| marketplace | `wb` | `^[a-zA-Z0-9_-]{1,64}$` |
 | cabinet | `client`, `seller` | то же |
 | widget | `catalog-cards` | то же |
 
