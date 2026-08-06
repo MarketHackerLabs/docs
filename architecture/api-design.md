@@ -153,7 +153,11 @@ GET /api/v1/billing/plans?client=manager_portal
 | Метод | Путь | Auth | Требование | Описание |
 |-------|------|:----:|------------|----------|
 | GET | `/api/v1/extension/entitlements` | ✓ | фича `browser_extension` | Доступные capabilities, статус подписки |
-| GET | `/api/v1/extension/config` | — | — | API URLs, min version, poll interval |
+| GET | `/api/v1/extension/config` | — | — | API URLs, min version, poll interval entitlements |
+| GET | `/api/v1/extension/config/{namespace}` | — | — | Remote config (для селекторов: `dom_selectors`); ETag / `304` |
+
+Remote config (DOM-селекторы, кэш, схема leaf, admin publish):
+[Remote config расширения](./extension-remote-config.md).
 
 Аутентификация расширения — стандартный JWT (`/auth/login` с `deviceId`). Доступ к
 самому расширению проверяет guard эндпоинта (`browser_extension`): личный план

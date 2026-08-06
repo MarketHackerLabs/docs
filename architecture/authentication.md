@@ -252,6 +252,14 @@ WB Gateway и организации в entitlements **не входят** — �
 GET /api/v1/extension/config
 ```
 
+Remote config (DOM-селекторы и др. namespaces, тоже без auth):
+
+```
+GET /api/v1/extension/config/{namespace}
+```
+
+Подробнее: [Remote config расширения](./extension-remote-config.md).
+
 Рекомендуемый poll interval entitlements — `entitlementsPollIntervalSeconds` из config
 (по умолчанию 300 с). При смене тарифа сервер инвалидирует кэш effective plan (TTL 60 с).
 

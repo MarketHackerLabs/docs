@@ -108,6 +108,7 @@ flowchart TB
 | [Кэширование](./caching.md) | Redis response cache, `@cached_read`, области данных, инвалидация |
 | [Биллинг и оплата](./billing.md) | Подписки, промокоды, докупка лимитов, ЮKassa, webhook, фоновая сверка |
 | [Анализ отзывов](./reviews-analysis.md) | AI-анализ отзывов/вопросов, квоты, OpenRouter |
+| [Remote config расширения](./extension-remote-config.md) | DOM-селекторы, ETag, контракт для extension |
 | [Продуктовые промо](./product-promotions.md) | Баннеры / CTA в клиентах, placements, targeting |
 | [Новости](./news.md) | Редакционный feed, прочтение, admin `news:manage` |
 | [Публичный роадмап](./public-roadmap.md) | CMS-план развития для лендинга, `roadmap:manage` |

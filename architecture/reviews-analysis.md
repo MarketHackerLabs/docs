@@ -12,7 +12,7 @@
 flowchart LR
   Client -->|nomenclatures| API
   API -->|reserve quota + enqueue| ARQ
-  ARQ --> Fetch[WB/Ozon adapter]
+  ARQ --> Fetch[WB/Lamoda/Ozon adapter]
   Fetch --> Pipeline[stats + sample + LLM]
   Pipeline --> PG[(result meta)]
   Fetch -.->|discard| X[нет хранения отзывов]
@@ -81,8 +81,8 @@ sequenceDiagram
 
 | Поле | Тип | Обязательный | Описание |
 |------|-----|--------------|----------|
-| `marketplace` | string | да | Сейчас: `wb`. `ozon` — создание временно отключено (антибот на DC IP) |
-| `nomenclatures` | number[] | да | 1…50 артикулов |
+| `marketplace` | string | да | `wb` / `lamoda`. `ozon` — создание временно отключено (антибот на DC IP) |
+| `nomenclatures` | string[] | да | 1…50 артикулов. WB/Ozon — числовые строки; Lamoda — SKU (`RTLAAN490701`). Числа в JSON принимаются и нормализуются в строки |
 | `organizationId` | uuid \| null | нет | Нужен при неоднозначном seat (иначе 409) |
 | `sampleSize` | number \| null | нет | Размер выборки; иначе default из настроек |
 | `splitByItems` | boolean | нет | default `true` |
@@ -125,7 +125,7 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 | `id` | uuid | Идентификатор анализа |
 | `status` | `"pending"` \| `"processing"` | Состояние |
 | `marketplace` | string | Маркетплейс |
-| `nomenclatures` | number[] | Артикулы |
+| `nomenclatures` | string[] | Артикулы |
 | `title` | string \| null | Заголовок |
 | `progressPercent` | number | 0…100 для лоадера |
 
@@ -138,7 +138,7 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 | `id` | uuid | Идентификатор |
 | `status` | `"pending"` \| `"processing"` \| `"completed"` \| `"error"` \| `"cancelled"` | Статус |
 | `marketplace` | string | Маркетплейс |
-| `nomenclatures` | number[] | Артикулы |
+| `nomenclatures` | string[] | Артикулы |
 | `title` | string \| null | Заголовок |
 | `progressPercent` | number | Прогресс 0…100 |
 | `reviewsCount` | number \| null | После обработки |
@@ -158,7 +158,7 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 | `id` | uuid | Идентификатор |
 | `status` | `"completed"` | Всегда completed |
 | `marketplace` | string | Маркетплейс |
-| `nomenclatures` | number[] | Артикулы |
+| `nomenclatures` | string[] | Артикулы |
 | `title` | string \| null | Заголовок |
 | `reviewsCount` | number \| null | Число отзывов |
 | `questionsCount` | number \| null | Число вопросов |
@@ -261,6 +261,36 @@ Query списка: `page`, `pageSize`, `status`, `marketplace`, `search` (email
 
 Fallback-хосты: `feedbacks1.wb.ru`, `feedbacks2.wb.ru`.
 
+## Lamoda (публичный источник)
+
+Seller API не подходит: там только вопросы своего кабинета, без публичных отзывов.
+
+Адаптер ходит в storefront API витрины:
+
+1. Сводка: `GET https://www.lamoda.ru/api/v1/product/reviews_info?sku={sku}&with_related=true`
+2. Отзывы: `GET .../product/reviews?sku={sku}&sort=date&sort_direction=desc&limit={n}&offset={n}&with_related=1`
+3. Вопросы: `GET .../product/questions?sku={sku}&limit={n}&offset={n}`
+
+Маппинг в канон:
+
+| Lamoda | Review / Question |
+|--------|-------------------|
+| `uuid` / `id` | `comment_id` / `question_id` |
+| запрошенный `sku` | `nomenclature` (строка) |
+| `rating` | `product_valuation` |
+| `text` | `feedback_text` |
+| `username` | `user_name` |
+| `created_time` | `feedback_date` |
+| `answer` (string) | `answer_text` |
+| `like_count` / `dislike_count` | votes |
+| `photos` / `snippet.photos` | `photos_count` |
+
+Антибот (ServicePipe): обычный Python TLS (`httpx`) даёт `403`. Адаптер ходит через
+`curl_cffi` с impersonate Chrome (как Ozon). На момент внедрения cookie не требуется;
+при массовых `lamoda_api.antibot` на DC IP может понадобиться доп. сессия/прокси.
+
+Идентификатор — Lamoda SKU (латиница+цифры, например `RTLAAN490701`), не числовой nm.
+
 ## Ozon (публичный источник)
 
 Seller API не подходит: нужны отзывы любого товара, не только своего кабинета.
@@ -325,9 +355,11 @@ Seller API не подходит: нужны отзывы любого това�
 
 - До 5000 отзывов на анализ (настраивается, потолок 5000).
 - Несколько номенклатур с первого дня.
-- Marketplace-agnostic канон Review/Question; адаптеры WB и Ozon.
+- Marketplace-agnostic канон Review/Question; адаптеры WB, Lamoda и Ozon.
+- Идентификаторы номенклатур — строки (`nomenclatures: string[]`); WB/Ozon — числовые строки.
 - WB публично отдаёт срез (~1000) отзывов по imt — полный `feedbackCount` с карточки больше.
 - Ozon: адаптер есть, но **создание анализа временно отключено** (Variti на типичном DC IP режет composer-api даже с cookie с той же машины).
+- Lamoda: адаптер включён; fetch через `curl_cffi`.
 
 ## Масштабирование
 

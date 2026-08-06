@@ -40,8 +40,9 @@ MarketHacker — платформа для управления продажам
 - [Безопасность](./architecture/security.md)
 - [Дизайн API](./architecture/api-design.md)
 - [Кэширование](./architecture/caching.md) — Redis response cache, `@cached_read`, инвалидация
-- [Биллинг и оплата](./architecture/billing.md) — ЮKassa, webhook, промокоды, фоновая сверка, автопродление
+- [Биллинг и оплата](./architecture/billing.md) — ЮКassa, webhook, промокоды, фоновая сверка, автопродление
 - [Партнёры](./architecture/partners.md) — кампании, атрибуция, комиссии, аналитика
+- [Remote config расширения](./architecture/extension-remote-config.md) — DOM-селекторы, ETag, контракт для extension
 - [Продуктовые промо](./architecture/product-promotions.md) — баннеры / CTA, placements, targeting
 - [Новости](./architecture/news.md) — редакционный feed, прочтение, admin `news:manage`
 - [Публичный роадмап](./architecture/public-roadmap.md) — CMS-план развития для лендинга, `roadmap:manage`

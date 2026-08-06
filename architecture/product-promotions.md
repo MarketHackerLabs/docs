@@ -4,7 +4,8 @@
 (Manager Portal сейчас; расширение — через те же placements в будущем).
 
 Не путать с **промокодами биллинга** (`/billing/promo/*`) и с remote config
-расширения (`/extension/config/{namespace}` — DOM-селекторы).
+расширения (`/extension/config/{namespace}` — DOM-селекторы; см.
+[Remote config расширения](./extension-remote-config.md)).
 
 ## Модель
 
