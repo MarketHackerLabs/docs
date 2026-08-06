@@ -20,9 +20,10 @@ flowchart LR
 
 1. `POST /api/v1/reviews-analyses` — reserve квоты, `202`, ARQ job.
 2. Worker: fetch → gender → aggregate LLM → optional per-item → finalize → commit квоты.
-3. `GET /api/v1/reviews-analyses/active` — виджет активных анализов.
-4. `GET /api/v1/reviews-analyses/{id}` — статус / прогресс (без результата).
-5. `GET /api/v1/reviews-analyses/{id}/result` — полный отчёт (`completed`).
+3. `GET /api/v1/reviews-analyses/marketplaces` — включённые маркетплейсы для формы создания.
+4. `GET /api/v1/reviews-analyses/active` — виджет активных анализов.
+5. `GET /api/v1/reviews-analyses/{id}` — статус / прогресс (без результата).
+6. `GET /api/v1/reviews-analyses/{id}/result` — полный отчёт (`completed`).
 6. `POST /api/v1/reviews-analyses/{id}/cancel` — отмена.
 
 ## Интеграция в Manager Portal
@@ -63,6 +64,7 @@ sequenceDiagram
 |-----|--------|------------------------|
 | Запуск | `POST .../reviews-analyses` | Сохранить `id` из `data`, открыть виджет |
 | Квота | `GET .../quota` | Показать остаток товаров за период |
+| Маркетплейсы | `GET .../marketplaces` | Список включённых площадок для формы |
 | Виджет | `GET .../active` каждые 2–5 с | Если массив не пуст — лоадер; пуст — скрыть |
 | Poll одного | `GET .../{id}` | Альтернатива active, если открыт конкретный анализ |
 | Отчёт | `GET .../{id}/result` | Только после `status === "completed"` |
@@ -109,6 +111,18 @@ Query: `organizationId` (опционально).
 | `periodStart` / `periodEnd` | datetime | Границы расчётного периода |
 | `organizationId` | uuid \| null | Org seat, если применимо |
 | `quotaMode` | string | `per_member_seat` \| `shared_pool` |
+
+#### `GET /marketplaces`
+
+Список маркетплейсов, включённых в admin settings. Форма создания показывает только их.
+
+Ответ `data`:
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `items` | array | Включённые площадки |
+| `items[].id` | string | Канонический id: `wb` \| `lamoda` \| `ozon` \| `yandex_market` \| `avito` |
+| `items[].label` | string | Подпись для UI |
 
 #### `GET /`
 
@@ -230,6 +244,22 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 `GET/PATCH /api/v1/admin/reviews-analysis/settings`  
 Не `platform_settings`. Секреты OpenRouter только в `.env` на сервере (не в клиентских ответах).
 
+Поля ответа / PATCH:
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `isEnabled` | boolean | Раздел включён |
+| `llmModel` | string | Модель OpenRouter |
+| `defaultSampleSize` | number | Выборка по умолчанию |
+| `maxNomenclatures` | number | Макс. артикулов в одном анализе |
+| `maxReviewsPerAnalysis` | number | Потолок отзывов |
+| `quotaMode` | string | `per_member_seat` \| `shared_pool` |
+| `enabledMarketplaces` | string[] | Включённые площадки: `wb`, `lamoda`, `ozon`, `yandex_market`, `avito` (минимум одна) |
+
+`yandex_market` и `avito` — заглушки без адаптера: их можно включить в admin, но создание анализа отклоняется до реализации источника.
+
+UI: Admin Panel → Анализ отзывов → Параметры — чекбоксы маркетплейсов.
+
 LLM HTTP timeout: 600 с (connect 30 с). На `ReadTimeout` — не больше 2 попыток; на 5xx upstream — до 3. Для долгих запросов через HTTP-прокси нужен высокий idle/request timeout прокси (иначе обрыв до ответа).
 
 ## Журнал анализов (admin)
@@ -286,8 +316,16 @@ Seller API не подходит: там только вопросы своег�
 | `photos` / `snippet.photos` | `photos_count` |
 
 Антибот (ServicePipe): обычный Python TLS (`httpx`) даёт `403`. Адаптер ходит через
-`curl_cffi` с impersonate Chrome (как Ozon). На момент внедрения cookie не требуется;
-при массовых `lamoda_api.antibot` на DC IP может понадобиться доп. сессия/прокси.
+`curl_cffi` с impersonate Chrome (как Ozon). На DC IP обычно нужны cookie и/или
+residential-прокси с тем же egress, с которого снимали сессию.
+
+Настройки:
+
+- `LAMODA_STOREFRONT_COOKIE` — Cookie-строка витрины (spid/spsc, желательно sid/lid)
+- `LAMODA_HTTP_PROXY_URL` — опциональный HTTP-прокси; env `HTTP_PROXY`/`HTTPS_PROXY` не читаются (`trust_env=false`)
+
+Без готовой cookie адаптер прогревает сессию запросом на главную. При массовых
+`lamoda_api.antibot` в логах — обновить cookie и/или прокси.
 
 Идентификатор — Lamoda SKU (латиница+цифры, например `RTLAAN490701`), не числовой nm.
 
@@ -358,8 +396,11 @@ Seller API не подходит: нужны отзывы любого това�
 - Marketplace-agnostic канон Review/Question; адаптеры WB, Lamoda и Ozon.
 - Идентификаторы номенклатур — строки (`nomenclatures: string[]`); WB/Ozon — числовые строки.
 - WB публично отдаёт срез (~1000) отзывов по imt — полный `feedbackCount` с карточки больше.
-- Ozon: адаптер есть, но **создание анализа временно отключено** (Variti на типичном DC IP режет composer-api даже с cookie с той же машины).
-- Lamoda: адаптер включён; fetch через `curl_cffi`.
+- Доступность площадок управляется `enabledMarketplaces` в admin settings (по умолчанию `wb` + `lamoda`).
+- Ozon: адаптер есть; на типичном DC IP Variti часто режет composer-api даже с cookie —
+  включать в admin только при рабочем cookie/прокси.
+- Lamoda: на DC IP обычно нужны `LAMODA_STOREFRONT_COOKIE` и/или `LAMODA_HTTP_PROXY_URL`.
+- Яндекс Маркет и Авито: заглушки в каталоге/admin; create отклоняется до появления адаптера.
 
 ## Масштабирование
 
