@@ -388,6 +388,9 @@ CORS_ORIGINS=["https://team.markethacker.ru","https://admin.markethacker.ru","ch
 
 WB_PORTAL_PUBLIC_BASE_URL=https://wb-proxy.markethacker.ru
 WB_CONNECT_PUBLIC_BASE_URL=https://wb-connect.markethacker.ru/api/v1/wb-connect
+PAYMENT_PUBLIC_BASE_URL=https://markethacker.ru/pay
+PAYMENT_CHECKOUT_INTENT_TTL_MINUTES=30
+MANAGER_PORTAL_URL=https://team.markethacker.ru
 WB_PORTAL_COOKIE_SECURE=true
 
 # Платежи

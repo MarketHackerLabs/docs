@@ -27,37 +27,69 @@
 | `BillingLimitAddonProduct` | `billing_limit_addon_products` | Каталог продуктов докупки лимитов |
 | `BillingLimitAddonEntitlement` | `billing_limit_addon_entitlements` | Активная докупка пользователя |
 
-## Поток оформления подписки (ЮKassa)
+## Поток оформления подписки (Hosted Checkout Launch)
+
+Клиенты **не** получают `confirmation_url` ЮKassa и **не** передают произвольный `successUrl`.
+Платёж у PSP создаётся только когда пользователь уже на домене MarketHacker (`markethacker.ru/pay/...`).
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant API
+    participant Pay as markethacker.ru/pay
     participant ARQ
     participant YK as ЮKassa
 
     Client->>API: POST /billing/subscription/upgrade
-    API->>YK: create_payment
-    API->>API: billing_payments (status=pending)
-    API->>ARQ: sync_yookassa_payment (defer 3 мин)
-    API-->>Client: checkout_url, payment_id
+    API->>API: billing_checkout_intents (pending)
+    API-->>Client: launchUrl, intentId, expiresAt
 
-    Client->>YK: оплата на странице ЮKassa
+    Client->>Pay: GET /pay/{token}
+    Pay->>YK: create_payment (return_url = /pay/return)
+    Pay->>API: intent status=launched
+    Pay->>YK: redirect → confirmation_url
+
     YK-->>API: POST /billing/webhooks/yookassa
-    Note over API: Основной путь — webhook
+    Note over API: Основной путь активации — webhook
+
+    YK->>Pay: return_url (/pay/return?token=…)
+    Pay->>API: sync payment + HTML результат
+    Pay->>Client: redirect на клиент (portal) / закрыть вкладку (extension)
 
     alt Webhook не дошёл
         ARQ->>API: sync_yookassa_payment
         API->>YK: GET /payments/{id}
         API->>API: activate subscription
     end
-
-    alt Пользователь вернулся на success_url
-        Client->>API: POST /billing/payments/{id}/verify
-        API->>YK: GET /payments/{id}
-        API-->>Client: status, subscription_active
-    end
 ```
+
+Публичные URL (prod, Caddy path split на `markethacker.ru`):
+
+| URL | Назначение |
+|-----|------------|
+| `https://markethacker.ru/pay/{token}` | Запуск оплаты (создание платежа + redirect на PSP) |
+| `https://markethacker.ru/pay/return?token=…` | Возврат после ЮKassa |
+
+Env: `PAYMENT_PUBLIC_BASE_URL` (prod: `https://markethacker.ru/pay`; local: `http://localhost:8000/api/v1/pay`), `PAYMENT_CHECKOUT_INTENT_TTL_MINUTES` (по умолчанию 30).
+
+### Breaking change API checkout
+
+`POST /billing/subscription/upgrade` и `POST /billing/limit-addons/purchase`:
+
+**Удалено из запроса:** `successUrl`, `cancelUrl`.
+
+**Ответ:**
+
+```json
+{
+  "launchUrl": "https://markethacker.ru/pay/…",
+  "provider": "yookassa",
+  "intentId": "…",
+  "expiresAt": "…"
+}
+```
+
+Поле `checkoutUrl` больше не возвращается. Клиент открывает только `launchUrl`.
 
 ## Подтверждение оплаты — три уровня
 
@@ -168,7 +200,7 @@ GET /api/v1/billing/plans?client=manager_portal
 |-------|------|:----:|----------|
 | GET | `/billing/plans` | — | Список активных тарифов (опционально `X-MarketHacker-Client`) |
 | GET | `/billing/subscription` | ✓ | Текущая подписка или `null` (free) |
-| POST | `/billing/subscription/upgrade` | ✓ | Оформление подписки → checkout URL |
+| POST | `/billing/subscription/upgrade` | ✓ | Создать Checkout Intent → `launchUrl` |
 | POST | `/billing/subscription/cancel` | ✓ | Отмена (доступ до конца периода) |
 | GET | `/billing/usage` | ✓ | Отчёт об использовании лимитов |
 | GET | `/billing/payment-methods` | ✓ | Сохранённые карты ЮKassa |
@@ -178,10 +210,17 @@ GET /api/v1/billing/plans?client=manager_portal
 | POST | `/billing/promo/redeem` | ✓ | Активация промокода (trial / free_period / limits_boost) |
 | GET | `/billing/limit-addons/catalog` | ✓ | Каталог доступных докупок + режим оплаты |
 | GET | `/billing/limit-addons` | ✓ | Активные докупки пользователя |
-| POST | `/billing/limit-addons/purchase` | ✓ | Checkout докупки → URL ЮKassa |
+| POST | `/billing/limit-addons/purchase` | ✓ | Checkout Intent докупки → `launchUrl` |
 | POST | `/billing/limit-addons/{id}/cancel` | ✓ | Отмена автопродления докупки |
 
-`paymentId` — ID платежа ЮKassa из ответа `subscription/upgrade` (`CheckoutResponse.paymentId`).
+Публичные (без JWT, opaque token):
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/pay/{token}` | Hosted Launch: создать платёж у PSP и redirect |
+| GET | `/pay/return?token=` | Возврат после PSP |
+
+`paymentId` для `/verify` — ID платежа ЮKassa (приходит в query `paymentId` после `/pay/return` для portal).
 
 #### POST /billing/subscription/upgrade
 
@@ -190,9 +229,7 @@ GET /api/v1/billing/plans?client=manager_portal
   "planName": "pro",
   "provider": "yookassa",
   "billingPeriod": "monthly",
-  "promoCode": "SUMMER20",
-  "successUrl": "https://team.markethacker.ru/billing/success",
-  "cancelUrl": "https://team.markethacker.ru/billing/cancel"
+  "promoCode": "SUMMER20"
 }
 ```
 
@@ -206,9 +243,10 @@ GET /api/v1/billing/plans?client=manager_portal
 ```json
 {
   "data": {
-    "checkoutUrl": "https://yoomoney.ru/checkout/...",
+    "launchUrl": "https://markethacker.ru/pay/…",
     "provider": "yookassa",
-    "paymentId": "2d7f3c8a-0001-5000-8000-1a2b3c4d5e6f"
+    "intentId": "…",
+    "expiresAt": "2026-08-07T12:30:00+00:00"
   }
 }
 ```
@@ -231,7 +269,7 @@ GET /api/v1/billing/plans?client=manager_portal
 }
 ```
 
-Рекомендуется вызывать на странице `successUrl` сразу после возврата пользователя с оплаты.
+Рекомендуется вызывать после возврата на `/billing?success=1&paymentId=…` (Hosted Launch подставляет `paymentId` в query).
 
 #### POST /billing/promo/validate
 
@@ -400,20 +438,25 @@ effective_limit = plan_limit + promo_boosts + purchased_addons
 sequenceDiagram
     participant Client
     participant API
+    participant Pay as markethacker.ru/pay
     participant YK as ЮKassa
 
     Client->>API: GET /billing/limit-addons/catalog
     API-->>Client: products, billingMode
 
     Client->>API: POST /billing/limit-addons/purchase
-    API->>YK: create_payment (limit_addon_initial)
-    API-->>Client: checkoutUrl, paymentId
+    API-->>Client: launchUrl, intentId
 
-    Client->>YK: оплата
+    Client->>Pay: GET /pay/{token}
+    Pay->>YK: create_payment (limit_addon_initial)
+    Pay->>YK: redirect → confirmation_url
     YK-->>API: webhook / ARQ sync
     API->>API: activate entitlement
-    API->>API: invalidate effective_plan cache
+    YK->>Pay: /pay/return
+    Pay->>Client: redirect / billing?addonSuccess=1
 ```
+
+Тело `purchase` без `successUrl`. Ответ — `CheckoutResponse` с `launchUrl` (как у upgrade).
 
 #### POST /billing/limit-addons/purchase
 
@@ -421,12 +464,11 @@ sequenceDiagram
 {
   "productId": "uuid",
   "quantityPacks": 1,
-  "billingPeriod": "monthly",
-  "successUrl": "https://team.markethacker.ru/billing?addon=success"
+  "billingPeriod": "monthly"
 }
 ```
 
-Ответ — `CheckoutResponse` (`checkoutUrl`, `paymentId`).
+Ответ — `CheckoutResponse` (`launchUrl`, `intentId`, `expiresAt`).
 
 #### POST /billing/limit-addons/{id}/cancel
 
@@ -860,25 +902,32 @@ Admin: `GET /admin/billing/payments/reconciliation`, `POST /admin/billing/paymen
 
 **Manager Portal** — страница `/billing`:
 
-- перед редиректом на ЮKassa сохраняет `paymentId` в `sessionStorage`;
-- после возврата (`?success=1`) вызывает `POST /billing/payments/{id}/verify` и обновляет подписку.
+- `POST upgrade` / `purchase` → открыть `launchUrl` (наш домен);
+- после возврата (`?success=1` / `?addonSuccess=1`, опционально `paymentId`) вызвать `POST /billing/payments/{id}/verify` и обновить подписку.
 
-**Browser extension** — после оплаты возвращается на страницу WB и только refetch'ит subscription. Активация должна прийти с webhook/cron (уровень 1–2); клиентского verify в расширении нет.
+**Browser extension** — обязательные правки (см. ниже). Не открывать URL ЮKassa напрямую; не передавать `successUrl` с домена маркетплейса.
 
-После редиректа с оплаты (Manager Portal):
+### Требования к клиентам (browser-extension и будущие)
 
-```typescript
-const paymentId = sessionStorage.getItem("mh_pending_yookassa_payment");
-if (paymentId) {
-  await api.verifyYookassaPayment(paymentId, token);
-}
-```
+1. Вызывать `POST /billing/subscription/upgrade` (и purchase) **без** `successUrl` / `cancelUrl`.
+2. В заголовке передавать `X-MarketHacker-Client: browser_extension` (или ключ клиента).
+3. Из ответа брать **`launchUrl`** (не `checkoutUrl`).
+4. Открывать `launchUrl` в **новой вкладке** (`chrome.tabs.create` / `window.open`), чтобы не уводить пользователя со страницы маркетплейса.
+5. После оплаты пользователь вернётся на `markethacker.ru/pay/return`; для extension показывается экран «можно закрыть вкладку». Подписка активируется webhook/cron; UI — refetch subscription on focus.
+6. Не подставлять `window.location.href` маркетплейса ни в какие платёжные URL.
 
 **Admin Panel**:
 
-- тестовый платёж: **Биллинг → Настройки → Проверка интеграции**;
+- тестовый платёж: **Биллинг → Настройки → Проверка интеграции** (отдельный admin flow, не Hosted Launch клиентов);
 - промокоды: **Биллинг → Промокоды**;
 - докупка лимитов: **Биллинг → Докупка лимитов** (продукты + режим оплаты);
 - настройки провайдеров: **Биллинг → Настройки**;
 - сверка зависших оплат: `GET/POST /admin/billing/payments/reconciliation*`;
 - партнёры: **Партнёры** (профили, кампании, аналитика). См. [Партнёры](./partners.md).
+
+### Подключение нового платёжного провайдера
+
+1. Реализовать `PaymentProvider` (`providers/base.py`) и зарегистрировать в `providers/registry.py`.
+2. В `CheckoutIntentService._launch_*` уже вызывается `get_payment_provider` — клиенты по-прежнему получают только `launchUrl`.
+3. `return_url` / success URL провайдера всегда строится сервером как `{PAYMENT_PUBLIC_BASE_URL}/return?token=…`.
+4. Клиентские приложения менять не нужно.
