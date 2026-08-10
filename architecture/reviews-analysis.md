@@ -363,8 +363,12 @@ Seller API не подходит: нужны отзывы любого това�
 Настройки:
 
 - `OZON_COMPOSER_COOKIE` — Cookie-строка витрины (одна строка в кавычках в `.env`)
-- `OZON_HTTP_PROXY_URL` — опциональный HTTP-прокси; env `HTTP_PROXY`/`HTTPS_PROXY` намеренно не читаются (`trust_env=false`)
+- `OZON_HTTP_PROXY_URL` — опциональный HTTP-прокси; если пусто — берётся `LAMODA_HTTP_PROXY_URL`
 - `REVIEWS_HTTP_PROXY_PROVIDER` — провайдер прокси reviews (`proxymarket` → этап `warming_proxy`; иначе без прогрева)
+
+Cookie для Ozon нужно снимать **с того же egress**, что и прокси (иначе Variti даёт
+`403` / `incidentId` после успешного CONNECT). Прогрев бьёт в composer-api и не
+считает `403` «успехом»; при antibot на fetch — до 8 повторов с паузой.
 
 ### Какие cookies нужны
 
