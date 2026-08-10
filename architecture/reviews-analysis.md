@@ -323,9 +323,13 @@ residential-прокси с тем же egress, с которого снимал
 
 - `LAMODA_STOREFRONT_COOKIE` — Cookie-строка витрины (spid/spsc, желательно sid/lid)
 - `LAMODA_HTTP_PROXY_URL` — опциональный HTTP-прокси; env `HTTP_PROXY`/`HTTPS_PROXY` не читаются (`trust_env=false`)
-
-Без готовой cookie адаптер прогревает сессию запросом на главную. При массовых
-`lamoda_api.antibot` в логах — обновить cookie и/или прокси.
+- `REVIEWS_HTTP_PROXY_PROVIDER` — см. Ozon / прогрев ProxyMarket ниже
+Без готовой cookie адаптер снимает ServicePipe cookie запросом на главную.
+При ``REVIEWS_HTTP_PROXY_PROVIDER=proxymarket`` оркестратор перед `loading_data`
+выполняет этап `warming_proxy` (`infrastructure/proxy_warmup.py`): нейтральный host +
+hostname витрины, пока не будет N успехов **подряд**; рабочие GET Lamoda/Ozon идут
+через `get_with_transport_retry` (CONNECT/TLS). Другие провайдеры / пустое значение —
+без прогрева. При массовых `lamoda_api.antibot` — обновить cookie и/или прокси.
 
 Идентификатор — Lamoda SKU (латиница+цифры, например `RTLAAN490701`), не числовой nm.
 
@@ -360,6 +364,7 @@ Seller API не подходит: нужны отзывы любого това�
 
 - `OZON_COMPOSER_COOKIE` — Cookie-строка витрины (одна строка в кавычках в `.env`)
 - `OZON_HTTP_PROXY_URL` — опциональный HTTP-прокси; env `HTTP_PROXY`/`HTTPS_PROXY` намеренно не читаются (`trust_env=false`)
+- `REVIEWS_HTTP_PROXY_PROVIDER` — провайдер прокси reviews (`proxymarket` → этап `warming_proxy`; иначе без прогрева)
 
 ### Какие cookies нужны
 
