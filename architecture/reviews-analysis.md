@@ -321,15 +321,19 @@ residential-прокси с тем же egress, с которого снимал
 
 Настройки:
 
-- `LAMODA_STOREFRONT_COOKIE` — Cookie-строка витрины (spid/spsc, желательно sid/lid)
+- Sealed cookie в Postgres — admin «Сессии площадок» (приоритет над env)
+- `LAMODA_STOREFRONT_COOKIE` — fallback Cookie-строка витрины (spid/spsc, желательно sid/lid)
 - `LAMODA_HTTP_PROXY_URL` — опциональный HTTP-прокси; env `HTTP_PROXY`/`HTTPS_PROXY` не читаются (`trust_env=false`)
 - `REVIEWS_HTTP_PROXY_PROVIDER` — см. Ozon / прогрев ProxyMarket ниже
+
+Локальный съём: `uv run python scripts/capture_storefront_cookie.py lamoda` (см. Ozon).
+
 Без готовой cookie адаптер снимает ServicePipe cookie запросом на главную.
 При ``REVIEWS_HTTP_PROXY_PROVIDER=proxymarket`` оркестратор перед `loading_data`
 выполняет этап `warming_proxy` (`infrastructure/proxy_warmup.py`): нейтральный host +
 hostname витрины, пока не будет N успехов **подряд**; рабочие GET Lamoda/Ozon идут
 через `get_with_transport_retry` (CONNECT/TLS). Другие провайдеры / пустое значение —
-без прогрева. При массовых `lamoda_api.antibot` — обновить cookie и/или прокси.
+без прогрева. При массовых `lamoda_api.antibot` — обновить cookie в admin и/или прокси.
 
 Идентификатор — Lamoda SKU (латиница+цифры, например `RTLAAN490701`), не числовой nm.
 
@@ -362,13 +366,22 @@ Seller API не подходит: нужны отзывы любого това�
 
 Настройки:
 
-- `OZON_COMPOSER_COOKIE` — Cookie-строка витрины (одна строка в кавычках в `.env`)
+- Sealed cookie в Postgres (`reviews_storefront_sessions`) — задаётся в admin
+  «Сессии площадок» без рестарта API. Приоритет над env.
+- `OZON_COMPOSER_COOKIE` — fallback Cookie-строка витрины (одна строка в кавычках в `.env`)
 - `OZON_HTTP_PROXY_URL` — опциональный HTTP-прокси; если пусто — берётся `LAMODA_HTTP_PROXY_URL`
 - `REVIEWS_HTTP_PROXY_PROVIDER` — провайдер прокси reviews (`proxymarket` → этап `warming_proxy`; иначе без прогрева)
 
-Cookie для Ozon нужно снимать **с того же egress**, что и прокси (иначе Variti даёт
-`403` / `incidentId` после успешного CONNECT). Прогрев бьёт в composer-api и не
-считает `403` «успехом»; при antibot на fetch — до 8 повторов с паузой.
+Локальный съём cookie (host Chrome, не prod Docker)::
+
+    cd backend
+    uv sync --group capture
+    uv run patchright install chrome
+    uv run python scripts/capture_storefront_cookie.py ozon
+
+Готовую строку вставить в admin → «Сессии площадок». Cookie нужно снимать **с того же egress**,
+что и прокси (иначе Variti даёт `403` / `incidentId` после успешного CONNECT). Прогрев бьёт
+в composer-api и не считает `403` «успехом»; при antibot на fetch — до 8 повторов с паузой.
 
 ### Какие cookies нужны
 
@@ -390,11 +403,12 @@ Cookie для Ozon нужно снимать **с того же egress**, что
 | `is_cookies_accepted` | согласие на cookies | не критична | долгая |
 | `ADDRESSBOOKBAR_*` и прочий UI | виджеты витрины | не нужны для composer-api | разные |
 
-Практичный минимум для `OZON_COMPOSER_COOKIE`: `abt_data` + `rfuid` + access/refresh + `xcid`/`__Secure-ETC`.
+Практичный минимум для cookie Ozon: `abt_data` + `rfuid` + access/refresh + `xcid`/`__Secure-ETC`.
 Полная строка с успешного composer-запроса предпочтительнее ручной «сборки».
 
 Точные `Expires` / `Max-Age` — в браузере: Application → Cookies → `ozon.ru`.
-При массовых `ozon_composer.antibot` в логах — обновить cookie (и при необходимости прокси с тем же egress, с которого снимали сессию).
+При массовых `ozon_composer.antibot` в логах — обновить cookie в admin «Сессии площадок»
+(и при необходимости прокси с тем же egress, с которого снимали сессию).
 
 Идентификатор номенклатуры — storefront `product_id` / `itemId` (целое число, совместимо с `nomenclatures[]`).
 
@@ -408,7 +422,8 @@ Cookie для Ozon нужно снимать **с того же egress**, что
 - Доступность площадок управляется `enabledMarketplaces` в admin settings (по умолчанию `wb` + `lamoda`).
 - Ozon: адаптер есть; на типичном DC IP Variti часто режет composer-api даже с cookie —
   включать в admin только при рабочем cookie/прокси.
-- Lamoda: на DC IP обычно нужны `LAMODA_STOREFRONT_COOKIE` и/или `LAMODA_HTTP_PROXY_URL`.
+- Lamoda: на DC IP обычно нужны cookie витрины (admin sealed или `LAMODA_STOREFRONT_COOKIE`)
+  и/или `LAMODA_HTTP_PROXY_URL`.
 - Яндекс Маркет и Авито: заглушки в каталоге/admin; create отклоняется до появления адаптера.
 
 ## Масштабирование
