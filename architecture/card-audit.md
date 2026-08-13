@@ -27,7 +27,7 @@
 1. Reserve Мурликов: `compute_cost(card_audit, use_reviews, competitor_count)`.
 2. Fetch своей карточки и конкурентов (card.wb.ru + basket card.json).
 3. Если `useReviews` — подтянуть последний completed `reviews_analysis` пользователя по этому nm (сжатый `llm`+`stats`); без анализа — аудит без отзывов, в limitations `[НЕТ ДАННЫХ]`.
-4. LLM (тот же OpenRouter / модель из `reviews_analysis_settings`) → JSON-отчёт: score, risks P0/P1, слайды, воронка, A/B, `generationPrompt`.
+4. LLM (`card_audit_settings.llm_model`, дефолт `openai/gpt-5.4`) → JSON-отчёт: score, risks P0/P1, слайды, воронка, A/B, `generationPrompt`.
 5. Commit Мурликов; при ошибке — release.
 
 Не в MVP: Browser-полки/выдача/реклама, скачивание всех media на диск, сырой `expert-source/`, полный 18-раздельный markdown-отчёт skill (вместо него компактный JSON под UI).
