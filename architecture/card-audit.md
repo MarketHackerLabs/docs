@@ -10,13 +10,15 @@
 
 | В skill | В продукте |
 |---------|------------|
-| `SKILL.md` + `references/*.md` | Методология и политика доказательности → системный/user промпт и JSON-схема отчёта |
+| `SKILL.md` + `references/*.md` | Curated expert md в `card_audit/.../llm/knowledge/` → system prompt |
 | `scripts/wb_collect.mjs`, `wb_audit.mjs` | Python-сборщик карточки/конкурентов в worker job |
-| `references/report-template.md`, `generation-and-ab.md` | Поля `result` и блок «промт для генерации» |
-| `agents/openai.yaml` | Только для Cursor/ChatGPT Agents UI; в backend не используется |
+| `chooseCategoryRoute` | `category_route.py`: clothing / pet-grooming / general-goods |
+| `references/report-template.md`, `generation-and-ab.md` | JSON-схема отчёта + блок generation в knowledge |
+| `agents/openai.yaml`, OpenAI Skills API | **Не используются** (рантайм — OpenRouter chat completions) |
+| `expert-source/`, `expert-rule-ledger.md` | Не грузятся в каждый аудит (слишком тяжело) |
 | Browser-досбор, полки, реклама | **Вне MVP** (quick-режим skill) |
 
-Итого: skill — спецификация и эталон сбора; рантайм — обычный FastAPI + ARQ + OpenRouter, как `reviews_analysis`.
+Итого: skill — спецификация и база знаний; рантайм — FastAPI + ARQ + OpenRouter. Экспертный контент вшивается в промпт (ядро + политика + generation + **один** категорийный файл).
 
 ## MVP (quick)
 
@@ -28,7 +30,7 @@
 4. LLM (тот же OpenRouter / модель из `reviews_analysis_settings`) → JSON-отчёт: score, risks P0/P1, слайды, воронка, A/B, `generationPrompt`.
 5. Commit Мурликов; при ошибке — release.
 
-Не в MVP: Browser-полки/выдача/реклама, скачивание всех media на диск, категорийные expert-файлы целиком (сжимаем в промпт-ядро).
+Не в MVP: Browser-полки/выдача/реклама, скачивание всех media на диск, сырой `expert-source/`, полный 18-раздельный markdown-отчёт skill (вместо него компактный JSON под UI).
 
 ## Поток
 
