@@ -95,9 +95,9 @@ sequenceDiagram
 
 Ответ: `ReviewsAnalysisSummary` (см. ниже).
 
-Лимит тарифа — пул **MH-кредитов** за период (`max_mh_credits_per_period`). Анализ отзывов списывает вес `reviews_analysis/base` (дефолт **10** MH-кредитов) за каждый артикул в запросе, в том числе при повторном анализе того же товара. Если стоимость запуска больше остатка, create отклоняется целиком (`402 PLAN_LIMIT_EXCEEDED`); частичного запуска нет.
+Лимит тарифа — пул **Мурликов** за период (`max_mh_credits_per_period`). Анализ отзывов списывает вес `reviews_analysis/base` (дефолт **10** Мурликов) за каждый артикул в запросе, в том числе при повторном анализе того же товара. Если стоимость запуска больше остатка, create отклоняется целиком (`402 PLAN_LIMIT_EXCEEDED`); частичного запуска нет.
 
-`GET /quota` для обратной совместимости с Chrome extension отдаёт **фасад в единицах «товаров»**: `limit/used/remaining = floor(credits / weight)`, где `weight` — эффективный вес `reviews_analysis/base`. Manager-portal показывает пользователю язык MH-кредитов и пояснение «1 товар = N MH-кредитов»; extension может продолжать считать ответ в товарах.
+`GET /quota` для обратной совместимости с Chrome extension отдаёт **фасад в единицах «товаров»**: `limit/used/remaining = floor(credits / weight)`, где `weight` — эффективный вес `reviews_analysis/base`. Manager-portal показывает пользователю язык Мурликов и пояснение «1 товар = N Мурликов»; extension может продолжать считать ответ в товарах.
 
 #### `GET /quota`
 
@@ -199,7 +199,7 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 | 403 | Нет доступа / раздел выключен |
 | 404 | Анализ не найден |
 | 409 | Нужен `organizationId` или результат ещё не готов |
-| 402 | Исчерпана квота MH-кредитов за период (или запрос дороже остатка) |
+| 402 | Исчерпана квота Мурликов за период (или запрос дороже остатка) |
 | 400 | Некорректный запрос (маркетплейс, nm, размер выборки) |
 
 ## Квоты
@@ -208,7 +208,7 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 Канонический лимит: `max_mh_credits_per_period` (+ докупка / буст `mh_credits`).  
 Поле `max_reviews_products_per_period` — deprecated read-compat зеркало (`floor(credits / 10)`), не источник истины.
 
-Внутри биллинга списание идёт в **MH-кредитах** через ledger `billing_mh_credits_ledger` и веса из каталога (`mh_credit_weights`, см. [Биллинг](./billing.md#mh-кредиты-и-веса)).  
+Внутри биллинга списание идёт в **Мурликах** через ledger `billing_mh_credits_ledger` и веса из каталога (`mh_credit_weights`, см. [Биллинг](./billing.md#мурлики-и-веса)).  
 Стоимость анализа: `compute_cost(reviews_analysis, sku_count=len(nomenclatures))` → обычно `sku_count * 10`.
 
 ### Legacy-фасад `/quota` (extension)
@@ -220,7 +220,7 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 | `limit` / `used` / `remaining` | `floor(credits_* / weight)`, `weight = reviews_analysis/base` |
 | `LIMIT_RESOURCE` в 402 | по-прежнему `reviews_products_per_period` (алиас → `mh_credits`) |
 
-`null` в тарифе / в ответе `/quota` — безлимит; иначе число **товаров-эквивалентов** за billing-период (не сырые MH-кредиты).
+`null` в тарифе / в ответе `/quota` — безлимит; иначе число **товаров-эквивалентов** за billing-период (не сырые Мурлики).
 
 Повторный анализ того же артикула снова расходует кредиты (каждый запуск вызывает модель).
 
@@ -237,7 +237,7 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 
 ### Проверка и списание
 
-1. `POST /reviews-analyses`: `resolve` (мягкая проверка) → `reserve` под `SELECT … FOR UPDATE` (жёсткая) в MH-кредитах.
+1. `POST /reviews-analyses`: `resolve` (мягкая проверка) → `reserve` под `SELECT … FOR UPDATE` (жёсткая) в Мурликах.
 2. Условие: `used_credits + cost <= limit_credits`. При `limit is None` ограничение не действует.
 3. **All-or-nothing:** если стоимость запуска больше остатка, весь запрос отклоняется с `402 PLAN_LIMIT_EXCEEDED` (частичного списания нет).
 4. Успех job → `commit` (reserved→consumed); ошибка / отмена → `release` reserved.
@@ -246,7 +246,7 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 
 | Режим | Поведение |
 |-------|-----------|
-| `per_member_seat` (default) | У каждого участника org свой пул MH-кредитов = лимит тарифа owner. 2 org → 2 независимых пула. |
+| `per_member_seat` (default) | У каждого участника org свой пул Мурликов = лимит тарифа owner. 2 org → 2 независимых пула. |
 | `shared_pool` | Все seat-запуски едят общий пул кредитов owner. |
 
 Анализ всегда привязан к пользователю, который запустил. При неоднозначности seat нужен `organizationId` (иначе 409).

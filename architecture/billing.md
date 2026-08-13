@@ -375,7 +375,7 @@ Webhook проверяет IP отправителя (диапазоны ЮKassa
 | `organizations` | `max_organizations` | user | Дополнительные организации владельца |
 | `members` | `max_members` | org | Участники команды (лимит org определяется подпиской владельца) |
 | `api_calls_per_day` | `max_api_calls_per_day` | user | Дневной лимит API-запросов |
-| `mh_credits` | `max_mh_credits_per_period` | user | MH-кредиты за период подписки (ИИ-действия) |
+| `mh_credits` | `max_mh_credits_per_period` | user | Мурлики за период подписки (ИИ-действия) |
 
 Алиас `reviews_products_per_period` → `mh_credits` (legacy ключ продуктов/снапшотов).  
 Поле тарифа `max_reviews_products_per_period` — deprecated зеркало `floor(max_mh_credits_per_period / 10)` для старых читателей.
@@ -399,9 +399,9 @@ effective_limit = plan_limit + promo_boosts + purchased_addons
 Результат кэшируется в Redis (TTL 60 с, инвалидация при смене подписки или докупки).  
 Сериализация плана (`plan_to_dict`) включает все числовые лимиты каталога, в том числе `max_mh_credits_per_period` (и зеркало `max_reviews_products_per_period`) — иначе кэш отдавал бы ложный безлимит.
 
-## MH-кредиты и веса
+## Мурлики и веса
 
-Единица списания ИИ-действий — **MH-кредит**. Каталог весов живёт в коде (`billing/domain/mh_credit_weights.py`); админ может перекрыть значения через таблицу `billing_mh_credit_weight_overrides` (UI: **Биллинг → Веса MH-кредитов**).
+Единица списания ИИ-действий — **Мурлик**. Каталог весов живёт в коде (`billing/domain/mh_credit_weights.py`); админ может перекрыть значения через таблицу `billing_mh_credit_weight_overrides` (UI: **Биллинг → Веса Мурликов**).
 
 Дефолты:
 
@@ -415,7 +415,7 @@ effective_limit = plan_limit + promo_boosts + purchased_addons
 
 Расчёт: `compute_cost(action_key, …)`. Ledger: `billing_mh_credits_ledger`.
 
-**Legacy-фасад для Chrome extension:** `GET /reviews-analyses/quota` по-прежнему отдаёт `limit/used/remaining` в **товарах** (`floor(credits / reviews_analysis.base)`), чтобы старый клиент не ломался. Manager-portal использует язык MH-кредитов в UI.
+**Legacy-фасад для Chrome extension:** `GET /reviews-analyses/quota` по-прежнему отдаёт `limit/used/remaining` в **товарах** (`floor(credits / reviews_analysis.base)`), чтобы старый клиент не ломался. Manager-portal использует язык Мурликов в UI.
 
 `GET /billing/usage` возвращает расширенные метрики:
 
