@@ -22,6 +22,7 @@ backend/
 │           ├── marketplace_accounts/
 │           ├── search_tags/
 │           ├── reviews_analysis/
+│           ├── card_audit/
 │           ├── billing/
 │           ├── promotions/
 │           ├── news/
@@ -86,6 +87,7 @@ flowchart BT
 | `marketplace_accounts` | Привязка WB/Ozon, хранение credentials |
 | `search_tags` | Поисковые запросы WB (ClickHouse, read-only) |
 | `reviews_analysis` | AI-анализ отзывов/вопросов (fetch с MP, без хранения отзывов) |
+| `card_audit` | AI-аудит карточки WB (collect + LLM-отчёт, Мурлики) |
 | `billing` | Подписки, тарифы, лимиты, промокоды, ЮKassa/Stripe |
 | `promotions` | Продуктовые баннеры / CTA в клиентах платформы |
 | `news` | Редакционный feed новостей платформы |
