@@ -23,6 +23,7 @@ backend/
 │           ├── search_tags/
 │           ├── reviews_analysis/
 │           ├── card_audit/
+│           ├── card_generate/
 │           ├── billing/
 │           ├── promotions/
 │           ├── news/
@@ -88,6 +89,7 @@ flowchart BT
 | `search_tags` | Поисковые запросы WB (ClickHouse, read-only) |
 | `reviews_analysis` | AI-анализ отзывов/вопросов (fetch с MP, без хранения отзывов) |
 | `card_audit` | AI-аудит карточки WB (collect + LLM-отчёт, Мурлики) |
+| `card_generate` | AI-генерация фото карточки (uploads + ImageProvider, Мурлики) |
 | `billing` | Подписки, тарифы, лимиты, промокоды, ЮKassa/Stripe |
 | `promotions` | Продуктовые баннеры / CTA в клиентах платформы |
 | `news` | Редакционный feed новостей платформы |

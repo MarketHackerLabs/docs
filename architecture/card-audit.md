@@ -67,6 +67,8 @@ UI:
 
 Фича тарифа: `card_audit` (seat-наследование, как у `reviews_analysis`).
 
+Промт из отчёта можно сразу отправить в [ИИ-генерацию фото](./card-generate.md) (`/card-generations/new?auditId=…`).
+
 ## Веса Мурликов
 
 См. [billing.md](./billing.md#мурлики-и-веса): `base` 30 + `with_reviews` 10 + `per_competitor` 5 (оверрайды в админке).

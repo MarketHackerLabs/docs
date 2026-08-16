@@ -109,6 +109,7 @@ flowchart TB
 | [Биллинг и оплата](./billing.md) | Подписки, промокоды, докупка лимитов, ЮKassa, webhook, фоновая сверка |
 | [Анализ отзывов](./reviews-analysis.md) | AI-анализ отзывов/вопросов, квоты, OpenRouter |
 | [ИИ-аудит карточки](./card-audit.md) | AI-аудит карточки WB, Мурлики, OpenRouter vision |
+| [ИИ-генерация фото](./card-generate.md) | Генерация кадров карточки, Мурлики, OpenRouter Image API |
 | [Remote config расширения](./extension-remote-config.md) | DOM-селекторы, ETag, контракт для extension |
 | [Продуктовые промо](./product-promotions.md) | Баннеры / CTA в клиентах, placements, targeting |
 | [Новости](./news.md) | Редакционный feed, прочтение, admin `news:manage` |
