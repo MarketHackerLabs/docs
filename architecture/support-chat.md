@@ -191,7 +191,7 @@ Deep-links в кнопках: `ADMIN_PANEL_URL` (`/support?c=…`, `/users/…`)
 ## Хранилище вложений
 
 S3-совместимое (`SUPPORT_S3_*`) или локальный путь (`SUPPORT_LOCAL_STORAGE_PATH`).  
-В production без S3: named volume `markethacker_support_attachments` → `/app/data/support-attachments` (`docker-compose.prod.yml`).
+В production без S3: named volume `markethacker_support_attachments` → `/app/data/support-attachments` у **api и worker** (`docker-compose.prod.yml`). Worker без этого volume не видит загрузки card-generate.
 
 ---
 
