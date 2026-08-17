@@ -63,7 +63,7 @@ sequenceDiagram
 | Шаг | Запрос | Что делать на клиенте |
 |-----|--------|------------------------|
 | Запуск | `POST .../reviews-analyses` | Сохранить `id` из `data`, открыть виджет |
-| Квота | `GET .../quota` | Показать остаток товаров за период |
+| Квота | `GET .../quota` | Показать остаток (для extension — в «товарах», см. фасад ниже) |
 | Маркетплейсы | `GET .../marketplaces` | Список включённых площадок для формы |
 | Виджет | `GET .../active` каждые 2–5 с | Если массив не пуст — лоадер; пуст — скрыть |
 | Poll одного | `GET .../{id}` | Альтернатива active, если открыт конкретный анализ |
@@ -95,7 +95,9 @@ sequenceDiagram
 
 Ответ: `ReviewsAnalysisSummary` (см. ниже).
 
-Лимит тарифа — число **товаров** (артикулов) за период (`max_reviews_products_per_period`), не число запусков и не токены. Каждый артикул в запросе списывает 1 единицу, в том числе при повторном анализе того же товара. Если `units > remaining`, create отклоняется целиком (`402 PLAN_LIMIT_EXCEEDED`); частичного запуска нет.
+Лимит тарифа — пул **Мурликов** за период (`max_mh_credits_per_period`). Анализ отзывов списывает вес `reviews_analysis/base` (дефолт **10** Мурликов) за каждый артикул в запросе, в том числе при повторном анализе того же товара. Если стоимость запуска больше остатка, create отклоняется целиком (`402 PLAN_LIMIT_EXCEEDED`); частичного запуска нет.
+
+`GET /quota` для обратной совместимости с Chrome extension отдаёт **фасад в единицах «товаров»**: `limit/used/remaining = floor(credits / weight)`, где `weight` — эффективный вес `reviews_analysis/base`. Manager-portal показывает пользователю язык Мурликов и пояснение «1 товар = N Мурликов»; extension может продолжать считать ответ в товарах.
 
 #### `GET /quota`
 
@@ -105,8 +107,8 @@ Query: `organizationId` (опционально).
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `limit` | number \| null | Лимит товаров; `null` — безлимит |
-| `used` | number | Зарезервировано + списано за период |
+| `limit` | number \| null | Лимит в единицах фасада (товары для extension); `null` — безлимит |
+| `used` | number | Зарезервировано + списано за период (в тех же единицах) |
 | `remaining` | number \| null | Остаток; `null` при безлимите |
 | `periodStart` / `periodEnd` | datetime | Границы расчётного периода |
 | `organizationId` | uuid \| null | Org seat, если применимо |
@@ -197,45 +199,59 @@ Query: `page` (≥1), `pageSize` (1…100, alias `pageSize`), `status` (опци
 | 403 | Нет доступа / раздел выключен |
 | 404 | Анализ не найден |
 | 409 | Нужен `organizationId` или результат ещё не готов |
-| 402 | Исчерпана квота товаров за период (или запрос больше остатка) |
+| 402 | Исчерпана квота Мурликов за период (или запрос дороже остатка) |
 | 400 | Некорректный запрос (маркетплейс, nm, размер выборки) |
 
 ## Квоты
 
 Фича тарифа: `reviews_analysis` (`user_or_org_seat`).  
-Лимит: `max_reviews_products_per_period` (+ докупка add-on `reviews_products_per_period`).  
-`null` в тарифе / в ответе `/quota` — безлимит; иначе число товаров за billing-период.
+Канонический лимит: `max_mh_credits_per_period` (+ докупка / буст `mh_credits`).  
+Поле `max_reviews_products_per_period` — deprecated read-compat зеркало (`floor(credits / 10)`), не источник истины.
 
-Единица списания — товар в запуске: `units = len(nomenclatures)`.  
-Повторный анализ того же артикула снова расходует лимит (каждый запуск вызывает модель).
+Внутри биллинга списание идёт в **Мурликах** через ledger `billing_mh_credits_ledger` и веса из каталога (`mh_credit_weights`, см. [Биллинг](./billing.md#мурлики-и-веса)).  
+Стоимость анализа: `compute_cost(reviews_analysis, sku_count=len(nomenclatures))` → обычно `sku_count * 10`.
+
+### Legacy-фасад `/quota` (extension)
+
+`ReviewsAnalysisQuotaService` конвертирует статус кредитов в «товары» для клиентов, которые ещё считают лимит по артикулам:
+
+| Поле quota | Значение |
+|------------|----------|
+| `limit` / `used` / `remaining` | `floor(credits_* / weight)`, `weight = reviews_analysis/base` |
+| `LIMIT_RESOURCE` в 402 | по-прежнему `reviews_products_per_period` (алиас → `mh_credits`) |
+
+`null` в тарифе / в ответе `/quota` — безлимит; иначе число **товаров-эквивалентов** за billing-период (не сырые Мурлики).
+
+Повторный анализ того же артикула снова расходует кредиты (каждый запуск вызывает модель).
 
 ### Хранение и расчёт
 
 | Величина | Источник |
 |----------|----------|
-| `limit` | `get_effective_plan().max_reviews_products_per_period` (тариф + промо + add-ons) |
-| `used` | `reviews_analysis_quota_ledger.reserved + consumed` за `period_start` |
-| `remaining` | `null` при безлимите, иначе `max(0, limit - used)` |
+| `limit` (кредиты) | `get_effective_plan().max_mh_credits_per_period` (тариф + промо + add-ons) |
+| `used` (кредиты) | `billing_mh_credits_ledger.reserved + consumed` за `period_start` |
+| `remaining` (кредиты) | `null` при безлимите, иначе `max(0, limit - used)` |
+| поля `/quota` | фасад: `floor(кредиты / weight)` |
 
-Лимит попадает в Redis-кэш effective plan (`billing:effective_plan`, TTL 60 с / stale 5 мин) через `plan_to_dict` / `plan_from_dict`. Поле `max_reviews_products_per_period` обязательно сериализуется — иначе после первого попадания в кэш клиент видел бы ложный безлимит.
+Лимит попадает в Redis-кэш effective plan (`billing:effective_plan`, TTL 60 с / stale 5 мин) через `plan_to_dict` / `plan_from_dict`. Поле `max_mh_credits_per_period` обязательно сериализуется — иначе после первого попадания в кэш клиент видел бы ложный безлимит. Зеркало `max_reviews_products_per_period` тоже пишется для старых читателей кэша.
 
 ### Проверка и списание
 
-1. `POST /reviews-analyses`: `resolve` (мягкая проверка) → `reserve` под `SELECT … FOR UPDATE` (жёсткая).
-2. Условие: `used + units <= limit`. При `limit is None` ограничение не действует.
-3. **All-or-nothing:** если в одном запросе товаров больше, чем `remaining`, весь запрос отклоняется с `402 PLAN_LIMIT_EXCEEDED` (частичного списания нет).
+1. `POST /reviews-analyses`: `resolve` (мягкая проверка) → `reserve` под `SELECT … FOR UPDATE` (жёсткая) в Мурликах.
+2. Условие: `used_credits + cost <= limit_credits`. При `limit is None` ограничение не действует.
+3. **All-or-nothing:** если стоимость запуска больше остатка, весь запрос отклоняется с `402 PLAN_LIMIT_EXCEEDED` (частичного списания нет).
 4. Успех job → `commit` (reserved→consumed); ошибка / отмена → `release` reserved.
 
 Режим в настройках раздела (`quotaMode`):
 
 | Режим | Поведение |
 |-------|-----------|
-| `per_member_seat` (default) | У каждого участника org свой лимит товаров = лимит тарифа owner. 2 org → 2 независимых пула. |
-| `shared_pool` | Все seat-запуски едят общий пул товаров owner. |
+| `per_member_seat` (default) | У каждого участника org свой пул Мурликов = лимит тарифа owner. 2 org → 2 независимых пула. |
+| `shared_pool` | Все seat-запуски едят общий пул кредитов owner. |
 
 Анализ всегда привязан к пользователю, который запустил. При неоднозначности seat нужен `organizationId` (иначе 409).
 
-Клиентский остаток: `GET /api/v1/reviews-analyses/quota?organizationId=…`.
+Клиентский остаток: `GET /api/v1/reviews-analyses/quota?organizationId=…` (фасад в товарах для extension).
 
 После смены лимита в тарифе или деплоя фикса кодека кэш `billing:effective_plan:*` можно сбросить; иначе новое значение подтянется по истечении TTL/stale.
 
