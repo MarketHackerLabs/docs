@@ -22,6 +22,7 @@ MarketHacker — платформа для управления продажам
 
 - [Production-деплой на чистый VPS](./operations/production-deploy.md) — полное руководство (Ubuntu 24.04, VK Cloud)
 - [Сброс MFA для поддержки](./operations/support-mfa-reset.md) — подтверждение владения аккаунтом перед сбросом
+- [Мурлики и себестоимость моделей](./operations/murliki-unit-economics.md) — рубли с тарифа и счёт OpenRouter
 
 ## Содержание
 

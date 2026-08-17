@@ -415,6 +415,8 @@ effective_limit = plan_limit + promo_boosts + purchased_addons
 
 Расчёт: `compute_cost(action_key, …)`. Ledger: `billing_mh_credits_ledger`.
 
+Перевод в рубли (тариф и счёт OpenRouter): [operations/murliki-unit-economics.md](../operations/murliki-unit-economics.md).
+
 **Legacy-фасад для Chrome extension:** `GET /reviews-analyses/quota` по-прежнему отдаёт `limit/used/remaining` в **товарах** (`floor(credits / reviews_analysis.base)`), чтобы старый клиент не ломался. Manager-portal использует язык Мурликов в UI.
 
 `GET /billing/usage` возвращает расширенные метрики:

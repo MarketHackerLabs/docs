@@ -106,7 +106,7 @@ flowchart TB
 | [Безопасность](./security.md) | Шифрование, изоляция, audit |
 | [Дизайн API](./api-design.md) | Версионирование, эндпоинты, ошибки |
 | [Кэширование](./caching.md) | Redis response cache, `@cached_read`, области данных, инвалидация |
-| [Биллинг и оплата](./billing.md) | Подписки, промокоды, докупка лимитов, ЮKassa, webhook, фоновая сверка |
+| [Биллинг и оплата](./billing.md) | Подписки, промокоды, докупка лимитов, ЮKassa, webhook, фоновая сверка. Мурлики в рублях: [operations/murliki-unit-economics.md](../operations/murliki-unit-economics.md) |
 | [Анализ отзывов](./reviews-analysis.md) | AI-анализ отзывов/вопросов, квоты, OpenRouter |
 | [ИИ-аудит карточки](./card-audit.md) | AI-аудит карточки WB, Мурлики, OpenRouter vision |
 | [ИИ-генерация фото](./card-generate.md) | Генерация кадров карточки, Мурлики, OpenRouter Image API |
