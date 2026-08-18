@@ -25,9 +25,9 @@
 Вход: свой `nmId`, до 5 конкурентов, флаг `useReviews`, опционально `organizationId`.
 
 1. Reserve Мурликов: `compute_cost(card_audit, use_reviews, competitor_count)` (UI берёт сумму через `POST /estimate-cost`).
-2. Fetch своей карточки и конкурентов (`card.wb.ru` + basket `card.json` через httpx с SSL-контекстом urllib3 — иначе wbaas даёт 403 на дефолтный TLS httpx; характеристики/composition/colors + `rich_v1.json` сводка + URL big-изображений).
+2. Fetch своей карточки и конкурентов (`card.wb.ru` + basket `card.json` через curl_cffi impersonate Safari — wbaas даёт 403 на TLS OpenSSL и на impersonate Chrome; характеристики/composition/colors/цена из `sizes[].price` + `rich_v1.json` сводка + URL big-изображений, не больше 10 кадров).
 3. Если `useReviews` — свой сбор отзывов/вопросов по `imtId` (не `reviews_analysis`).
-4. LLM (`card_audit_settings.llm_model`, дефолт `openai/gpt-5.4`) с vision обложки + 2–3 слайдов → JSON-отчёт (score, risks, слайды, аудитория, возражения, SWOT, текст-банк, A/B, roadmap, `generationPrompt`).
+4. LLM (`card_audit_settings.llm_model`, дефолт `openai/gpt-5.4`) с vision до 10 кадров галереи и публичными ценами своей карточки и конкурентов → JSON-отчёт (score, risks, слайды, аудитория, возражения, SWOT, текст-банк, A/B, roadmap, `generationPrompt`).
 5. Commit Мурликов; при ошибке — release.
 
 Не в MVP: Browser-полки/выдача/реклама, скачивание всех media на диск, сырой `expert-source/`, RAG по архиву экспертных эфиров.
