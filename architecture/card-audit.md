@@ -22,13 +22,15 @@
 
 ## MVP (quick)
 
-Вход: свой `nmId`, до 5 конкурентов, флаг `useReviews`, опционально `organizationId`.
+Вход: свой `nmId`, до 5 конкурентов, флаг `useReviews`, опциональные доп. файлы владельца (`extraFiles` + `extraNote`), опционально `organizationId`.
 
-1. Reserve Мурликов: `compute_cost(card_audit, use_reviews, competitor_count)` (UI берёт сумму через `POST /estimate-cost`).
-2. Fetch своей карточки и конкурентов (`card.wb.ru` + basket `card.json` через curl_cffi impersonate Safari — wbaas даёт 403 на TLS OpenSSL и на impersonate Chrome; характеристики/composition/colors/цена из `sizes[].price` + `rich_v1.json` сводка + URL big-изображений, не больше 10 кадров).
-3. Если `useReviews` — свой сбор отзывов/вопросов по `imtId` (не `reviews_analysis`).
-4. LLM (`card_audit_settings.llm_model`, дефолт `openai/gpt-5.4`) с vision до 10 кадров галереи и публичными ценами своей карточки и конкурентов → JSON-отчёт (score, risks, слайды, аудитория, возражения, SWOT, текст-банк, A/B, roadmap, `generationPrompt`).
-5. Commit Мурликов; при ошибке — release.
+1. `POST /uploads` — до 10 файлов (таблицы, документы, изображения) → ключи в storage (`card-audit/{userId}/…`).
+2. Reserve Мурликов: `compute_cost(card_audit, use_reviews, competitor_count)` (UI берёт сумму через `POST /estimate-cost`). Доп. файлы стоимость не меняют.
+3. Fetch своей карточки и конкурентов (`card.wb.ru` + basket `card.json` через curl_cffi impersonate Safari — wbaas даёт 403 на TLS OpenSSL и на impersonate Chrome; характеристики/composition/colors/цена из `sizes[].price` + `rich_v1.json` сводка + URL big-изображений, не больше 10 кадров).
+4. Если `useReviews` — свой сбор отзывов/вопросов по `imtId` (не `reviews_analysis`).
+5. Из доп. файлов извлекается текст (CSV/TSV/XLSX/JSON/TXT/MD/DOCX/PDF) и до 4 скриншотов уходят в vision.
+6. LLM (`card_audit_settings.llm_model`, дефолт `openai/gpt-5.4`) с vision до 10 кадров галереи + опциональные скриншоты владельца и публичными ценами своей карточки и конкурентов → JSON-отчёт (score, risks, слайды, аудитория, возражения, SWOT, текст-банк, A/B, roadmap, `generationPrompt`). Выгрузки запросов/рекламы/воронки из файлов имеют приоритет над публичной карточкой; без них `searchQueriesNote` / SERP / полки остаются `[НЕТ ДАННЫХ]`.
+7. Commit Мурликов; при ошибке — release.
 
 Не в MVP: Browser-полки/выдача/реклама, скачивание всех media на диск, сырой `expert-source/`, RAG по архиву экспертных эфиров.
 
@@ -36,11 +38,13 @@
 
 ```mermaid
 flowchart LR
-  Client -->|nmId + competitors| API
+  Client -->|uploads| Storage[(object storage)]
+  Client -->|nmId + competitors + extraFiles| API
   API -->|reserve Мурлики + enqueue| ARQ
   ARQ --> Fetch[WB card + chars + images]
   Fetch --> Reviews[optional own reviews]
-  Reviews --> LLM[OpenRouter JSON + vision]
+  Reviews --> Files[extract extra files]
+  Files --> LLM[OpenRouter JSON + vision]
   LLM --> PG[(card_audits.result)]
 ```
 
@@ -50,6 +54,7 @@ Prefix: `/api/v1/card-audits`.
 
 | Метод | Назначение |
 |-------|------------|
+| `POST /uploads` | Загрузить доп. файл → ключ для create |
 | `POST /` | Создать аудит → `202` |
 | `POST /estimate-cost` | Живой расчёт Мурликов |
 | `GET /` | Список |
@@ -57,6 +62,47 @@ Prefix: `/api/v1/card-audits`.
 | `GET /{id}` | Статус |
 | `GET /{id}/result` | Отчёт |
 | `POST /{id}/cancel` | Отмена |
+
+### `POST /uploads`
+
+Multipart: поле `file` (обязательное).
+
+Ответ `data`:
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `key` | string | Ключ в storage. Передать в `extraFiles[].key` при create |
+| `filename` | string | Имя файла после очистки пути |
+| `contentType` | string | Нормализованный тип по расширению |
+| `sizeBytes` | number | Размер в байтах |
+
+Ограничения: до 10 МБ; расширения `.csv` `.tsv` `.txt` `.md` `.json` `.xlsx` `.pdf` `.docx` `.jpg` `.jpeg` `.png` `.webp` `.gif`.
+
+### `POST /` → `202`
+
+Тело (дополнительно к `nmId` / `competitors` / `useReviews` / `title` / `organizationId`):
+
+| Поле | Тип | Обязательный | Описание |
+|------|-----|--------------|----------|
+| `extraFiles` | array | нет | До 10 элементов с `key`, `filename`, `contentType`, `sizeBytes` из `/uploads` |
+| `extraNote` | string \| null | нет | Комментарий владельца, до 400 символов |
+
+`extraFiles[].key` должен принадлежать текущему пользователю (`card-audit/{userId}/…`). Неверный ключ → 400.
+
+Пример `extraFiles`:
+
+```json
+[
+  {
+    "key": "card-audit/11111111-2222-3333-4444-555555555555/ab12cd.xlsx",
+    "filename": "jam-july.xlsx",
+    "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "sizeBytes": 184320
+  }
+]
+```
+
+`extraNote` пример: `"выгрузка поисковых запросов из Джем за июль"`.
 
 Admin: `/api/v1/admin/card-audit/settings`, `/audits`, `/audits/{id}`, `/audits/{id}/result`, cancel.
 
