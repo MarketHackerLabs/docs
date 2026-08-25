@@ -20,6 +20,8 @@ backend/
 │           ├── users/
 │           ├── organizations/
 │           ├── marketplace_accounts/
+│           ├── product_matching/
+│           ├── stock_control/
 │           ├── search_tags/
 │           ├── reviews_analysis/
 │           ├── card_audit/
@@ -86,6 +88,8 @@ flowchart BT
 | `users` | Профиль пользователя, настройки |
 | `organizations` | CRUD организаций, роли, приглашения, membership |
 | `marketplace_accounts` | Привязка WB/Ozon, хранение credentials |
+| `product_matching` | Общая карта внутренних товаров и артикулов WB/Ozon |
+| `stock_control` | Контроль FBS-остатков WB/Ozon, физический журнал, снимки складов и рекомендации |
 | `search_tags` | Поисковые запросы WB (ClickHouse, read-only) |
 | `reviews_analysis` | AI-анализ отзывов/вопросов (fetch с MP, без хранения отзывов) |
 | `card_audit` | AI-аудит карточки WB (collect + LLM-отчёт, Мурлики) |
