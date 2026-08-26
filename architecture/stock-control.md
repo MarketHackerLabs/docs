@@ -80,7 +80,17 @@ effective_ttl_hours = org.wb_content_catalog_ttl_hours
 
 ### Ozon
 
-Семантика sync без изменений: stocks и заказы по текущим правилам адаптера, без Content-каталога и matched-only фильтра.
+`mp_sku` — числовой SKU Ozon (положительное целое в строке). Невалидные значения пропускаются; sync продолжается.
+
+**Hot path (каждый цикл):**
+
+1. `ping` через `POST /v1/warehouse/list`.
+2. `POST /v2/product/info/stocks-by-warehouse/fbs` только по matched sku из `product_matching` (org + marketplace `ozon`), чанками. Если matched пуст — запросов stocks нет; заказы и алерты обрабатываются как обычно.
+3. Инкрементальные FBS-заказы с `orders_cursor_at`.
+4. Обновление снимков; `listed_qty = 0` выставляется только для запрошенных склад/SKU, отсутствующих в ответе.
+5. Binding снимков и заказов по полю `sku` ответа (не по `offer_id`).
+
+Content-каталог и картинки Ozon в v1 нет. Полный обход `product/list` / `product/info/list` на sync не выполняется.
 
 ## REST API
 
