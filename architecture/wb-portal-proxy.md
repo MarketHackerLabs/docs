@@ -349,7 +349,7 @@ WB использует множество субдоменов. Маршрут�
 В HTML (перед первым `<script>` WB) попадает только:
 
 1. **Тонкий bootstrap** (`#mh-portal-auth`): `window.__MH_PROXY_CFG` (auth, host map, guard deny-lists, badge) + синхронная запись LS/cookies + отключение SW.
-2. **Один interceptor** — `<script src="/__proxy__/interceptor.<hash>.js">` (свой asset gateway, не upstream). Там URL-rewrite, `fetch`/`XHR`/`window.open`, UI-guard и badge.
+2. **Один interceptor** — `<script src="/__proxy__/interceptor.<hash>.js">` (свой asset gateway, не upstream). Там URL-rewrite, `fetch`/`XHR`/`window.open`, UI-guard и badge. CDN per-domain configs (`…/dynamic-menu-config/…/config-{hostname}.json`, `…/dynamic-geo-utils/…/geo-utils-{hostname}.json`, …) SPA собирает из `location.hostname`; на proxy файла нет (404). Interceptor универсально заменяет вхождения `location.hostname` в **pathname** на `seller.wildberries.ru` (authority/query не трогает) — без allowlist префиксов имён файлов.
 
 `/__proxy__/*` обрабатывается `GatewayService` до WB upstream (иммутабельный `Cache-Control`, ETag по хэшу файла). Произвольный JS из админки по-прежнему запрещён — только типизированный `portal_inject_config`.
 
@@ -371,7 +371,7 @@ https://brand-new.wildberries.ru/x → https://wb-proxy.markethacker.ru/brand-ne
 
 - Пути **вне** `/ns/*` (статика SPA, ассеты) разрешены всем менеджерам с активным кабинетом — не содержат бизнес-данных.
 - Пути `/ns/*` резолвятся через каталог `WB_PORTAL_ROUTES` (first-match по самому длинному префиксу) в `section_key`.
-- **Оболочка кабинета** (`section_key is None`): `/ns/abac/`, `/ns/suppliers/suppliers-portal-core/`, `/ns/passport-portal/`, `/ns/widget-manager/`, `/ns/mini-widgets/`, `/ns/monetization/`, `/ns/informer-api/` — bootstrap SPA. Достаточно любого `can_read` (включая POST JSON-RPC).
+- **Оболочка кабинета** (`section_key is None`): `/ns/abac/`, `/ns/suppliers/suppliers-portal-core/`, `/ns/menu/`, `/ns/suppliers-registration/`, `/ns/consent/`, `/ns/email-verification/`, `/ns/passport-portal/`, `/ns/widget-manager/`, `/ns/mini-widgets/`, `/ns/monetization/`, `/ns/informer-api/` — bootstrap SPA (включая incomplete seller / `onboarding-home-page`). Достаточно любого `can_read` (включая POST JSON-RPC). Без `/ns/menu/` (getMainMenu) SPA зависает на `__ROOT_URLS__=/not-found`.
 - **Неизвестный `/ns/*`-путь отклоняется по умолчанию** (403), если явно не добавлен в escape-hatch: `WB_GATEWAY_EXTRA_ALLOWED_NS_PREFIXES` (env) или `extra_allowed_ns_prefixes` в админке «Инжект WB-портала» (без редеплоя).
 - Helper-хосты с записью в `WB_HELPER_HOST_ACL` требуют section/capability. Остальные хосты из `WB_HOST_TO_PREFIX`, CDN `*.wbbasket.ru` / `*.wbstatic.net` и `marketplace.wildberries.ru` — только binding (инфраструктура: Facct, passport, chat). Прочий неизвестный `*.wildberries.ru` — 403.
 - Мутирующие методы (`POST`/`PUT`/`PATCH`/`DELETE`) дополнительно требуют `can_write` в разделе; часть маршрутов помечена `allow_write=False` (read-only навсегда).
