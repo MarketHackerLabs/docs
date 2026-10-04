@@ -98,5 +98,6 @@ role grants.
 ## Enforcement
 
 `GatewayService` → `resolve_member_acl` → `AccessPolicy(sections, capabilities)`.
-Helper-subdomains (`seller-ads`, `seller-supply`, …) проверяются через
-`evaluate_helper_host`.
+Helper-subdomains с бизнес-данными (`seller-ads`, `seller-supply`, `cmp`, …)
+проверяются через `evaluate_helper_host` и `WB_HELPER_HOST_ACL`. Инфраструктурные
+хосты (Facct/`seller-services`, passport, CDN `*.wbbasket.ru`) — только binding.

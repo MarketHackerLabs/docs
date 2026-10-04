@@ -107,6 +107,8 @@ flowchart TB
 | [Дизайн API](./api-design.md) | Версионирование, эндпоинты, ошибки |
 | [Кэширование](./caching.md) | Redis response cache, `@cached_read`, области данных, инвалидация |
 | [Биллинг и оплата](./billing.md) | Подписки, промокоды, докупка лимитов, ЮKassa, webhook, фоновая сверка. Мурлики в рублях: [operations/murliki-unit-economics.md](../operations/murliki-unit-economics.md) |
+| [Карта товаров площадок](./product-matching.md) | Общая карта SKU ↔ артикулы WB/Ozon, без привязки к кабинету |
+| [Контроль FBS-остатков](./stock-control.md) | Физический склад, остатки WB/Ozon по складам, рекомендации и алерты |
 | [Анализ отзывов](./reviews-analysis.md) | AI-анализ отзывов/вопросов, квоты, OpenRouter |
 | [ИИ-аудит карточки](./card-audit.md) | AI-аудит карточки WB, Мурлики, OpenRouter vision |
 | [ИИ-генерация фото](./card-generate.md) | Генерация кадров карточки, Мурлики, OpenRouter Image API |

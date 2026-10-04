@@ -10,42 +10,46 @@ Chromium-расширение (MV3) не может использовать htt
 
 ## Поток аутентификации
 
+Помимо email/password доступен параллельный канал [Product Telegram](./telegram-bot.md)
+(контракт клиентов: [telegram-auth-client.md](../integrations/telegram-auth-client.md)).
+Он не заменяет email/password.
+
 ```mermaid
 sequenceDiagram
-    participant EXT as Extension
-    participant API as Backend API
-    participant AUTH as Auth Service
-    participant PG as PostgreSQL
+  participant EXT as Extension
+  participant API as Backend API
+  participant AUTH as Auth Service
+  participant PG as PostgreSQL
 
-    EXT->>API: POST /auth/login (email, password)
-    API->>AUTH: verify credentials
-    alt MFA enabled
-        AUTH-->>EXT: 403 MFA_REQUIRED + mfaToken
-        EXT->>API: POST /auth/mfa/complete (mfaToken, code)
-        API->>AUTH: verify TOTP
-    end
-    AUTH->>PG: store refresh token (family_id, device_id)
-    AUTH-->>EXT: accessToken (15m) + refreshToken (30d)
+  EXT->>API: POST /auth/login (email, password)
+  API->>AUTH: verify credentials
+  alt MFA enabled
+      AUTH-->>EXT: 403 MFA_REQUIRED + mfaToken
+      EXT->>API: POST /auth/mfa/complete (mfaToken, code)
+      API->>AUTH: verify TOTP
+  end
+  AUTH->>PG: store refresh token (family_id, device_id)
+  AUTH-->>EXT: accessToken (15m) + refreshToken (30d)
 
-    Note over EXT: Токены в chrome.storage.session
+  Note over EXT: Токены в chrome.storage.session
 
-    EXT->>API: GET /search-tags/queries (Authorization: Bearer ...)
-    API->>AUTH: validate JWT (только user_id) + billing feature check
-    API-->>EXT: data
+  EXT->>API: GET /search-tags/queries (Authorization: Bearer ...)
+  API->>AUTH: validate JWT (только user_id) + billing feature check
+  API-->>EXT: data
 
-    EXT->>API: GET /extension/entitlements (Authorization: Bearer ...)
-    alt нет фичи browser_extension
-        API-->>EXT: 403 PERMISSION_DENIED
-    else доступ есть
-        API-->>EXT: capabilities, subscription, features
-    end
+  EXT->>API: GET /extension/entitlements (Authorization: Bearer ...)
+  alt нет фичи browser_extension
+      API-->>EXT: 403 PERMISSION_DENIED
+  else доступ есть
+      API-->>EXT: capabilities, subscription, features
+  end
 
-    Note over EXT: accessToken истёк
+  Note over EXT: accessToken истёк
 
-    EXT->>API: POST /auth/refresh (refreshToken)
-    API->>AUTH: validate + rotate
-    AUTH->>PG: invalidate old, store new
-    AUTH-->>EXT: new accessToken + refreshToken
+  EXT->>API: POST /auth/refresh (refreshToken)
+  API->>AUTH: validate + rotate
+  AUTH->>PG: invalidate old, store new
+  AUTH-->>EXT: new accessToken + refreshToken
 ```
 
 Токен не хранит "текущую организацию" — у пользователя может быть несколько

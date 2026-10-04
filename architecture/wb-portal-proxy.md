@@ -66,6 +66,7 @@ team.markethacker.ru          wb-proxy.markethacker.ru       wb-connect.marketha
 | `application/onboarding_proxy_service.py` | Python | `wb_connect` | Проксирование + накопление cookies/suppliers в Redis во время onboarding |
 | `infrastructure/onboarding_client.py` | httpx | `wb_connect` | Прозрачный reverse-proxy 1 WB-хост ↔ 1 onboarding-поддомен |
 | `infrastructure/capture_store.py` | Redis | `wb_connect` | Connect-токен + атомарное (Lua) накопление cookies/suppliers |
+| `infrastructure/suppliers_client.py` | httpx | `wb_connect` | Активный `getUserSuppliers` при capture без `x-supplier-id` |
 | `domain/portal_inject.py`, `domain/portal_inject_config.py`, `domain/wb_menu_groups.py`, `domain/wb_hosts.py`, `domain/portal_auth.py`, `domain/portal_cookies.py` | Python | `marketplace_accounts` (общие) | JS-скрипты инжекта, типобезопасная admin-конфигурация, 6 групп меню, host↔prefix маппинг, парсинг credentials, cookie-хелперы — используются ОБОИМИ модулями |
 | `domain/models.py::MarketplaceCredentialVault` | SQLAlchemy | `marketplace_accounts` | Один активный ряд credentials на кабинет, optimistic concurrency (`version`) |
 
@@ -190,9 +191,9 @@ sequenceDiagram
 
     O->>Popup: window.open(connectUrl)
     Popup->>API: GET /wb-connect/{token}
-    API-->>Popup: 302 + Set-Cookie mh_wb_connect (Domain=root_host) + редирект на seller-auth.{root}/ru/
+    API-->>Popup: HTML + Set-Cookie mh_wb_connect + редирект на seller-auth.{root}/__mh_connect_reset
 
-    Note over Popup,WB: WbConnectOnboardingMiddleware: Host-based dispatch,<br/>прозрачный reverse-proxy 1 WB-хост ↔ 1 поддомен,<br/>накопление HttpOnly Set-Cookie в Redis (атомарный Lua)
+    Note over Popup,WB: Wipe leftover cookies/LS на seller-auth и seller,<br/>затем логин seller-auth.{root}/ru/.<br/>Middleware: 1 WB-хост ↔ 1 поддомен, накопление HttpOnly в Redis
 
     Popup->>WB: Логин (телефон + SMS)
     WB-->>Popup: authorizev3 в localStorage, Set-Cookie (HttpOnly)
@@ -209,10 +210,10 @@ sequenceDiagram
 | Шаг | Endpoint / действие | Описание |
 |-----|---------------------|----------|
 | 1 | `POST .../marketplace-accounts/{account_id}/capture-init` | Owner-only. Статус кабинета → `connecting` (кроме уже `active` — повторный connect не рвёт текущий трафик). Одноразовый `captureToken` в Redis (TTL `wb_connect_session_ttl_seconds`, 10 мин) |
-| 2 | `GET /wb-connect/{token}` | Cookie `mh_wb_connect` (`Domain=wb_onboarding_cookie_domain`), редирект на `seller-auth.{root_host}/ru/` |
-| 3 | `WbConnectOnboardingMiddleware` | Host-based dispatch: каждый WB-хост ↔ свой поддомен, копит `Set-Cookie` и suppliers в Redis |
-| 4 | `POST /wb-connect/capture/{token}` | Auto-capture rewriter-скрипт: JWT + cookies + накопленные HttpOnly → `ConnectService.receive_capture` |
-| 5 | `GET /wb-connect/{token}/suppliers` | Manager-portal: список организаций WB, обнаруженных во время connect (для `select-supplier`) |
+| 2 | `GET /wb-connect/{token}` | Cookie `mh_wb_connect` (`Domain=wb_onboarding_cookie_domain`). Редирект на `seller-auth.{root}/__mh_connect_reset?next=seller` — сброс leftover cookies/localStorage на `seller-auth` и `seller`, затем страница логина `seller-auth.{root}/ru/`. Без этого «Перепривязать» в том же браузере захватывает старый `authorizev3` |
+| 3 | `WbConnectOnboardingMiddleware` | Host-based dispatch: каждый WB-хост ↔ свой поддомен, копит `Set-Cookie` и suppliers в Redis (пассивный sniff — fallback) |
+| 4 | `POST /wb-connect/capture/{token}` | Auto-capture rewriter-скрипт: JWT + cookies + накопленные HttpOnly → `ConnectService.receive_capture`. Если нет `x-supplier-id`, но есть `wbx-validation-key` — сервер сам вызывает WB `getUserSuppliers`, сохраняет список и подставляет первый `id` как `x-supplier-id` |
+| 5 | `GET /wb-connect/{token}/suppliers` | Manager-portal: список организаций WB (активный fetch и/или пассивный sniff) для `select-supplier` |
 | 6 | `GET .../marketplace-accounts/{account_id}/credentials-status` | Manager-portal poll: `status`, `hasActiveSession`, `lastVerifiedAt` |
 
 **Маппинг поддоменов:** `{label}.wb_onboarding_root_host` ↔ реальный WB-хост, где `label` — первая DNS-метка реального хоста (`seller-auth`, `seller-services`, ...), `wb_onboarding_root_host` выводится из `WB_CONNECT_PUBLIC_BASE_URL` (см. `Settings.wb_onboarding_root_host` / `wb_hosts.py::onboarding_proxy_host`).
@@ -228,11 +229,13 @@ sequenceDiagram
 
 После успешного `receive_capture` connect-токен потребляется атомарно (`consume_connect_session` — Lua GETDEL, устраняет TOCTOU при гонке двух конкурентных запросов с одним токеном). Список `suppliers` живёт по собственному TTL независимо от основного токена — доступен manager-portal и ПОСЛЕ успешного capture, для шага выбора организации.
 
+**Список организаций (suppliers):** основной путь — активный `POST https://seller.wildberries.ru/ns/suppliers/suppliers-portal-core/suppliers` (`getUserSuppliers`) из `suppliers_client.fetch_user_suppliers` во время `receive_capture`, когда cookies ещё без `x-supplier-id`. Пассивный перехват того же JSON-RPC в onboarding-прокси остаётся запасным (если SPA сама сходила на эндпоинт). При нескольких юрлицах в vault сначала пишется первая организация; manager-portal после успеха показывает выбор и вызывает `select-supplier`.
+
 **CORS между onboarding-поддоменами:** реальный WB — набор независимых поддоменов, обращающихся друг к другу через CORS с `credentials: include` (например `seller-auth.` → `seller-services.` для публичных справочников типа кода стран). Прокси воспроизводит эту топологию поддоменами `wb-connect.markethacker.ru`, поэтому браузер требует preflight + `Access-Control-Allow-*`. `WbConnectOnboardingMiddleware` отвечает на `OPTIONS` сам (без проксирования на WB и без connect-token guard — preflight принципиально идёт без cookie) и добавляет `Access-Control-Allow-Origin`/`Access-Control-Allow-Credentials` ко всем ответам, если `Origin` запроса принадлежит `wb_onboarding_root_host`. Инжектируемый rewriter-скрипт (`build_onboarding_subdomain_rewriter_script`) дополнительно форсирует `credentials: 'include'` / `xhr.withCredentials = true` для fetch/XHR к onboarding-поддоменам.
 
 Публичный эндпоинт `POST /wb-connect/capture/{token}` также принимает CORS-запросы от РЕАЛЬНОГО `seller.wildberries.ru` (не только от `wb_onboarding_root_host`) — это нужно для fallback-сниппета, вставляемого вручную в DevTools Console на настоящем сайте WB. `_capture_cors_origin` никогда не отражает произвольный `Origin` (в отличие от старой реализации с `CORS: *`) — допускаются только `WB_MAIN_HOST` и `wb_onboarding_root_host`(+поддомены).
 
-**Manager-portal:** компонент `WbConnectModal` — popup без `noopener` (для `postMessage`), poll `credentials-status`, ручной сниппет в collapsible «DevTools» (fallback).
+**Manager-portal:** компонент `WbConnectModal` — popup без `noopener` (для `postMessage`), poll `credentials-status`, ручной сниппет в collapsible «DevTools» (fallback). Если после capture список организаций пустой, модалка не закрывается молча: предупреждение проверить кабинет (признак, что BFF WB не отдал suppliers).
 
 ### Fallback: JS-сниппет (DevTools)
 
@@ -346,7 +349,7 @@ WB использует множество субдоменов. Маршрут�
 В HTML (перед первым `<script>` WB) попадает только:
 
 1. **Тонкий bootstrap** (`#mh-portal-auth`): `window.__MH_PROXY_CFG` (auth, host map, guard deny-lists, badge) + синхронная запись LS/cookies + отключение SW.
-2. **Один interceptor** — `<script src="/__proxy__/interceptor.<hash>.js">` (свой asset gateway, не upstream). Там URL-rewrite, `fetch`/`XHR`/`window.open`, UI-guard и badge.
+2. **Один interceptor** — `<script src="/__proxy__/interceptor.<hash>.js">` (свой asset gateway, не upstream). Там URL-rewrite, `fetch`/`XHR`/`window.open`, UI-guard и badge. CDN per-domain configs (`…/dynamic-menu-config/…/config-{hostname}.json`, `…/dynamic-geo-utils/…/geo-utils-{hostname}.json`, …) SPA собирает из `location.hostname`; на proxy файла нет (404). Interceptor универсально заменяет вхождения `location.hostname` в **pathname** на `seller.wildberries.ru` (authority/query не трогает) — без allowlist префиксов имён файлов.
 
 `/__proxy__/*` обрабатывается `GatewayService` до WB upstream (иммутабельный `Cache-Control`, ETag по хэшу файла). Произвольный JS из админки по-прежнему запрещён — только типизированный `portal_inject_config`.
 
@@ -368,7 +371,9 @@ https://brand-new.wildberries.ru/x → https://wb-proxy.markethacker.ru/brand-ne
 
 - Пути **вне** `/ns/*` (статика SPA, ассеты) разрешены всем менеджерам с активным кабинетом — не содержат бизнес-данных.
 - Пути `/ns/*` резолвятся через каталог `WB_PORTAL_ROUTES` (first-match по самому длинному префиксу) в `section_key`.
+- **Оболочка кабинета** (`section_key is None`): `/ns/abac/`, `/ns/suppliers/suppliers-portal-core/`, `/ns/menu/`, `/ns/suppliers-registration/`, `/ns/consent/`, `/ns/email-verification/`, `/ns/passport-portal/`, `/ns/widget-manager/`, `/ns/mini-widgets/`, `/ns/monetization/`, `/ns/informer-api/` — bootstrap SPA (включая incomplete seller / `onboarding-home-page`). Достаточно любого `can_read` (включая POST JSON-RPC). Без `/ns/menu/` (getMainMenu) SPA зависает на `__ROOT_URLS__=/not-found`.
 - **Неизвестный `/ns/*`-путь отклоняется по умолчанию** (403), если явно не добавлен в escape-hatch: `WB_GATEWAY_EXTRA_ALLOWED_NS_PREFIXES` (env) или `extra_allowed_ns_prefixes` в админке «Инжект WB-портала» (без редеплоя).
+- Helper-хосты с записью в `WB_HELPER_HOST_ACL` требуют section/capability. Остальные хосты из `WB_HOST_TO_PREFIX`, CDN `*.wbbasket.ru` / `*.wbstatic.net` и `marketplace.wildberries.ru` — только binding (инфраструктура: Facct, passport, chat). Прочий неизвестный `*.wildberries.ru` — 403.
 - Мутирующие методы (`POST`/`PUT`/`PATCH`/`DELETE`) дополнительно требуют `can_write` в разделе; часть маршрутов помечена `allow_write=False` (read-only навсегда).
 
 | section_key | Раздел | Пример путей WB |
@@ -409,7 +414,7 @@ document.cookie = "WBTokenV3=" + token + "; path=/; max-age=86400; SameSite=Lax"
 
 **URL rewriter** — перехватывает все WB-URL и переписывает через прокси-префиксы: абсолютные URL, protocol-relative, корневые пути; login-пути `seller-auth.wildberries.ru` → корень прокси (`/`).
 
-**Перехват fetch/XHR** — ставит заголовок `authorizev3` из inject-time `token` (источник истины — vault, не potentially-stale LS), блокирует logoff (`200`), конвертирует `401` на `/ns/abac/`/`/ns/validate` → `204`.
+**Перехват fetch/XHR** — ставит заголовок `authorizev3` из inject-time `token` (источник истины — vault, не potentially-stale LS), блокирует logoff (`200`), конвертирует `401` на `/ns/abac/`/`/ns/validate` → `204` с телом `null` (пустая строка в `Response` для 204 бросает TypeError в Chrome).
 
 **Перехват навигации** — `window.location.assign/replace`, `history.pushState/replaceState` → `rewriteUrl`; блокирует logoff-URL.
 
@@ -466,8 +471,8 @@ WB устанавливает новые значения cookies в ответ�
 1. `WbUpstreamClient` собирает `Set-Cookie` из ответов WB.
 2. `_clean_set_cookie_header` (`wb_gateway/api/router.py`) очищает каждую куку: убирает `Domain`, `SameSite=None` → `SameSite=Lax`.
 3. `should_relay_set_cookie_to_browser` (`portal_auth.py`) фильтрует: `SERVER_ONLY_COOKIE_KEYS` (например `wbx-validation-key`) никогда не улетают в браузер менеджера — только на сервер, в vault.
-4. Очищенные preference-`Set-Cookie` (`locale` / `external-locale`) добавляются в ответ браузеру.
-5. Upstream Cookie для WB в обычном gateway-режиме собирается **только из vault** (`merge_upstream_cookies` игнорирует browser Cookie для auth-ключей).
+4. Очищенные preference- и device-`Set-Cookie` (`locale`, `cfidsw-wb`, `__zzatw-wb`) добавляются в ответ браузеру.
+5. Upstream Cookie: auth-ключи только из vault; device/fingerprint (`WB_DEVICE_COOKIE_KEYS`) — из живой вкладки менеджера.
 
 ### Фильтрация списка организаций (suppliers)
 
@@ -560,6 +565,7 @@ CORS_ORIGINS=["https://team.markethacker.ru","https://admin.markethacker.ru","ch
 |----------|--------|
 | `wbx-validation-key` HttpOnly — нельзя захватить через JS | Guided Connect: server-side накопление; fallback — DevTools prompt |
 | Секретные cookies в браузере менеджера | `SERVER_ONLY_COOKIE_KEYS` — не инжектятся и не relay'ятся из браузера |
+| Facct `cfidsw-wb` / `__zzatw-wb` в живой вкладке | Gateway `merge_upstream_cookies` прокидывает `WB_DEVICE_COOKIE_KEYS`; без них WB BFF даёт 401 |
 | Stale `mh_wb_connect` после capture | Токен потребляется атомарно (Lua GETDEL); cookie сбрасывается в ответе `done`/`capture` |
 | WB Service Worker кэширует HTML | SW unregister + noop `sw.js`; HTML — `Cache-Control: no-store` |
 | Wipe Cache Storage на каждый HTML | **Запрещён**: ломал `root__*__requests-cache` → `onUpdateCache` → infinite `location.reload` |
@@ -599,6 +605,7 @@ CORS_ORIGINS=["https://team.markethacker.ru","https://admin.markethacker.ru","ch
 | `backend/src/markethacker/modules/wb_connect/application/connect_service.py` | State machine привязки кабинета |
 | `backend/src/markethacker/modules/wb_connect/application/onboarding_proxy_service.py` | Проксирование во время onboarding |
 | `backend/src/markethacker/modules/wb_connect/infrastructure/capture_store.py` | Redis: connect-токен + атомарное накопление cookies/suppliers |
+| `backend/src/markethacker/modules/wb_connect/infrastructure/suppliers_client.py` | Активный `getUserSuppliers` к seller-порталу при capture без `x-supplier-id` |
 | `backend/src/markethacker/modules/marketplace_accounts/domain/models.py` | `MarketplaceAccount` (`CabinetStatus`), `MarketplaceCredentialVault` |
 | `backend/src/markethacker/modules/marketplace_accounts/application/credential_vault_service.py` | Шифрование/расшифровка, `ensure_fresh` / `slide-v3`, optimistic concurrency |
 | `backend/src/markethacker/modules/marketplace_accounts/domain/portal_inject.py` | JS bootstrap + guard + badge + onboarding rewriter (общий для обоих модулей) |
