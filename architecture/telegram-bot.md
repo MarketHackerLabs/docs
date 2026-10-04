@@ -71,9 +71,66 @@ Email/password login не заменяется. MFA при входе через
 | POST | `/admin/telegram/broadcasts` |
 | GET | `/admin/telegram/broadcasts` |
 | GET | `/admin/telegram/broadcasts/{id}` |
+| POST | `/admin/telegram/broadcasts/{id}/cancel` |
 | POST | `/admin/telegram/media` |
 
-Рассылка ставится в ARQ job `send_telegram_broadcast` (timeout 1800s).
+Список рассылок: query `offset`, `limit`, опционально `status` (фильтр по статусу).
+
+Рассылка выполняется ARQ job `send_telegram_broadcast` (timeout 1800s). Стабильный `job_id`: `telegram-broadcast:{broadcast_uuid}`.
+
+### Статусы рассылки
+
+| Статус | Значение |
+|---|---|
+| `draft` | Черновик (резерв модели; create из админки сразу ставит очередь или план) |
+| `scheduled` | Отложена: `scheduledAt` в будущем, deliveries уже созданы |
+| `queued` | В очереди на немедленную отправку |
+| `sending` | Идёт отправка |
+| `done` | Завершена |
+| `failed` | Ошибка на уровне рассылки |
+| `cancelled` | Запланированная рассылка отменена до старта |
+
+### Создание и отложенная отправка
+
+`POST /admin/telegram/broadcasts` — те же поля контента и аудитории, плюс опциональный **`scheduledAt`** (ISO datetime, timezone-aware; naive трактуется как UTC):
+
+| `scheduledAt` | Поведение |
+|---|---|
+| не передан или `null` | `status=queued`, job без отложки |
+| в будущем | `status=scheduled`, колонка `scheduled_at`, deliveries создаются **сразу** (состав аудитории фиксируется на момент create), `enqueue_job(..., defer_by=scheduledAt−now)` |
+| ≤ now | `ValidationError`: время отправки уже прошло |
+
+Локальный файл по `photoStorageKey` на volume **не** удаляется при create scheduled — только после первой успешной доставки, когда получен `photo_file_id` (как для немедленной рассылки).
+
+### Отмена
+
+`POST /admin/telegram/broadcasts/{id}/cancel`:
+
+- только если `status=scheduled`;
+- иначе `ValidationError` (в т.ч. если уже `sending`);
+- успех → `status=cancelled`.
+
+Отложенный ARQ job при срабатывании вызывает `process_broadcast`: для `cancelled` — no-op (лог, без отправки). Отмена не удаляет job из Redis.
+
+### Жизненный цикл job
+
+```
+create (scheduledAt в будущем) → scheduled + deferred job
+create (без scheduledAt)       → queued + job сразу
+scheduled + due / cron         → process_broadcast → sending → done|failed
+cancel из scheduled            → cancelled → job no-op
+```
+
+`process_broadcast` принимает вход только при `status ∈ {queued, sending, scheduled}`; при старте переводит в `sending`.
+
+### Cron (safety net)
+
+ARQ cron **`enqueue_due_telegram_broadcasts`** — **каждую минуту** (`unique=True`, timeout 120s):
+
+- выборка `status=scheduled` и `scheduled_at ≤ now()`;
+- для каждой — повторный `enqueue_job` с тем же `job_id` `telegram-broadcast:{id}`.
+
+Нужно пережить рестарт Redis/worker без потери просроченных отложенных рассылок; дубликаты отправки сдерживаются стабильным `job_id` и сменой статуса на `sending`/`done`.
 
 ### Аудитории
 
@@ -88,9 +145,22 @@ Email/password login не заменяется. MFA при входе через
 - `parseMode`: `HTML` | `MarkdownV2`
 - текст / caption, photo URL или `photoStorageKey`, inline keyboard
 
+Ответ create/list/get: `scheduledAt`, счётчики доставки, `errorSummary` (без списка deliveries в v1).
+
+## Admin Panel (UI)
+
+Страница `/telegram` (право `telegram:manage`):
+
+- **Композер:** после upload файла превью — `<img>` с `URL.createObjectURL(file)`; при смене или удалении фото — `URL.revokeObjectURL`. Параллельно на API уходит `photoStorageKey`.
+- **Отправка:** «Сразу» / «Запланировать» (`datetime-local`, МСК в UI как у новостей); в API — `scheduledAt`. Подсказка: состав аудитории фиксируется при создании, не в момент send.
+- **Рассылки:** таблица с фильтром по статусу, pagination; клик по строке — modal (статус, аудитория, текст, кнопки, статистика, даты, `scheduledAt` для запланированных).
+- **«Повторить»:** клон в композер (новая рассылка) — заполнение формы и переход на вкладку «Сообщение», **без** автоматической отправки.
+- **«Отменить»:** только для `scheduled` → `POST …/broadcasts/{id}/cancel`.
+- **Подписчики:** ссылка на `/users/{userId}`.
+
 ## Модели
 
 - `telegram_accounts` — user ↔ telegram_user_id / chat_id
-- `telegram_broadcasts` / `telegram_broadcast_deliveries`
+- `telegram_broadcasts` (`scheduled_at`, статусы включая `scheduled` / `cancelled`) / `telegram_broadcast_deliveries`
 - `telegram_updates`
 - `users.email`, `users.password_hash` — nullable
