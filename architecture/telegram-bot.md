@@ -34,8 +34,8 @@
 
 | Команда | Поведение |
 |---|---|
-| `/start CODE` | Привязка к user_id из Redis (код из `POST /auth/telegram/link`) |
-| `/start` (новый TG) | Создаёт `User` (email/password = null) + org + `TelegramAccount`, шлёт кнопку входа |
+| `/start CODE` | Привязка к user_id из Redis (код из `POST /auth/telegram/link`); ставит отложенное приветствие |
+| `/start` (новый TG) | Создаёт `User` (email/password = null) + org + `TelegramAccount`, шлёт кнопку входа; ставит отложенное приветствие |
 | `/start` (уже связан) | Кнопка входа (one-time token) |
 | `/login` | То же: one-time token → Manager Portal |
 
@@ -73,6 +73,8 @@ Email/password login не заменяется. MFA при входе через
 | GET | `/admin/telegram/broadcasts/{id}` |
 | POST | `/admin/telegram/broadcasts/{id}/cancel` |
 | POST | `/admin/telegram/media` |
+| GET | `/admin/telegram/settings/welcome` |
+| PATCH | `/admin/telegram/settings/welcome` |
 
 Список рассылок: query `offset`, `limit`, опционально `status` (фильтр по статусу).
 
@@ -147,20 +149,34 @@ ARQ cron **`enqueue_due_telegram_broadcasts`** — **каждую минуту**
 
 Ответ create/list/get: `scheduledAt`, счётчики доставки, `errorSummary` (без списка deliveries в v1).
 
+### Отложенное приветствие
+
+После успешной регистрации (`/start`) и после успешной привязки (`/start CODE`) ставится ARQ job `send_telegram_welcome` со стабильным `job_id` `telegram-welcome:{account_uuid}` и `defer_by` из настроек (по умолчанию 600 секунд).
+
+Настройки в `platform_settings`:
+
+| Ключ | Default |
+|---|---|
+| `telegram_welcome_enabled` | `true` |
+| `telegram_welcome_delay_seconds` | `600` |
+| `telegram_welcome_content` | `{ text, parse_mode, photo_*, reply_markup }` — HTML-текст со ссылкой на Chrome Web Store |
+
+При отправке читаются актуальные настройки; если выключено, аккаунт неактивен или `welcome_sent_at` уже заполнен — сообщение не уходит. После успешной доставки пишется `telegram_accounts.welcome_sent_at`. После первой доставки с `photo_storage_key` в настройки сохраняется `photo_file_id`.
+
 ## Admin Panel (UI)
 
-Страница `/telegram` (право `telegram:manage`):
+Страница `/telegram` (право `telegram:manage`), подразделы в сайдбаре как у Парсинга:
 
-- **Композер:** после upload файла превью — `<img>` с `URL.createObjectURL(file)`; при смене или удалении фото — `URL.revokeObjectURL`. Параллельно на API уходит `photoStorageKey`.
-- **Отправка:** «Сразу» / «Запланировать» (`datetime-local`, МСК в UI как у новостей); в API — `scheduledAt`. Подсказка: состав аудитории фиксируется при создании, не в момент send.
-- **Рассылки:** таблица с фильтром по статусу, pagination; клик по строке — modal (статус, аудитория, текст, кнопки, статистика, даты, `scheduledAt` для запланированных).
-- **«Повторить»:** клон в композер (новая рассылка) — заполнение формы и переход на вкладку «Сообщение», **без** автоматической отправки.
-- **«Отменить»:** только для `scheduled` → `POST …/broadcasts/{id}/cancel`.
-- **Подписчики:** ссылка на `/users/{userId}`.
+- `/telegram` — подписчики
+- `/telegram/message` — композер + отправка одному / рассылка
+- `/telegram/broadcasts` — история рассылок
+- `/telegram/settings` — приветствие (вкл/выкл, задержка, тот же композер)
+
+Композер: превью через `URL.createObjectURL`; «Повторить» из рассылок открывает `/telegram/message` с черновиком.
 
 ## Модели
 
-- `telegram_accounts` — user ↔ telegram_user_id / chat_id
+- `telegram_accounts` — user ↔ telegram_user_id / chat_id (`welcome_sent_at`)
 - `telegram_broadcasts` (`scheduled_at`, статусы включая `scheduled` / `cancelled`) / `telegram_broadcast_deliveries`
 - `telegram_updates`
 - `users.email`, `users.password_hash` — nullable
