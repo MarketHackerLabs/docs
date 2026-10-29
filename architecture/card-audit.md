@@ -29,10 +29,60 @@
 3. Fetch своей карточки и конкурентов (`card.wb.ru` + basket `card.json` через curl_cffi impersonate Safari — wbaas даёт 403 на TLS OpenSSL и на impersonate Chrome; характеристики/composition/colors/цена из `sizes[].price` + `rich_v1.json` сводка + URL big-изображений, не больше 10 кадров).
 4. Если `useReviews` — свой сбор отзывов/вопросов по `imtId` (не `reviews_analysis`).
 5. Из доп. файлов извлекается текст (CSV/TSV/XLSX/JSON/TXT/MD/DOCX/PDF) и до 4 скриншотов уходят в vision.
-6. LLM (`card_audit_settings.llm_model`, дефолт `openai/gpt-5.4`) с vision до 10 кадров галереи + опциональные скриншоты владельца и публичными ценами своей карточки и конкурентов → JSON-отчёт (score, risks, слайды, аудитория, возражения, SWOT, текст-банк, A/B, roadmap, `generationPrompt`). Выгрузки запросов/рекламы/воронки из файлов имеют приоритет над публичной карточкой; без них `searchQueriesNote` / SERP / полки остаются `[НЕТ ДАННЫХ]`.
+6. LLM (`card_audit_settings.llm_model`, дефолт `openai/gpt-5.4`) с vision до 10 кадров галереи + опциональные скриншоты владельца и публичными ценами своей карточки и конкурентов → JSON-отчёт версии 2.0 (см. [Формат отчёта](#формат-отчёта-v20)). Выгрузки запросов/рекламы/воронки из файлов имеют приоритет над публичной карточкой; без них `searchQueriesNote` / SERP / полки остаются `[НЕТ ДАННЫХ]`.
 7. Commit Мурликов; при ошибке — release.
 
 Не в MVP: Browser-полки/выдача/реклама, скачивание всех media на диск, сырой `expert-source/`, RAG по архиву экспертных эфиров.
+
+## Формат отчёта (v2.0)
+
+System prompt и JSON-контракт — `card_audit/infrastructure/llm/prompts.py` (инструкция версии 2.0: маркировка доказательности, запрет масштабирования рекламы, ответ только JSON). Экспертная база по-прежнему подмешивается через `knowledge_loader`, а не вшита в `prompts.py`. Модель отчёта — `CardAuditReport` (`card_audit/domain/report_schema.py`), поля в JSON — camelCase.
+
+Новые поля v2.0 (все опциональны на уровне схемы; пустые блоки UI не показывает):
+
+| Поле | Тип | Назначение |
+|------|-----|------------|
+| `reportVersion` | string | `"2.0"` для новых аудитов. У старых аудитов пустое/отсутствует |
+| `platform`, `mode`, `advertisingDecision` | string, string, boolean | Площадка, режим (`quick`), решение по рекламе |
+| `confidenceScore` | number \| null, 0–100 | Уверенность в отчёте по полноте и качеству входных данных. Отдельно от `score` |
+| `scoreBreakdown[]` | array | Разбор `score`: `component`, `score` (nullable), `weight`, `confidence` (`high`\|`medium`\|`low`), `evidence`, `deductions` |
+| `signals[]` | array | Сигналы из отзывов: `mentions`, `sampleSize`, `share`, `variants`, `examples`, `confidence`. Старое поле `count` читается для совместимости |
+| `prioritizedActions[]` | array | Действия с `actionId`, `priority`, `impact`, `effort`, `confidence`, `dependencies`, `requiredAssets`, `ownerRole`, `acceptanceCriteria`, `metric`, `doNotStartBefore` |
+| `expectationGaps[]`, `returnRisk`, `funnelDiagnosis` | array, object, object | Расхождение ожиданий, риск возвратов, диагностика воронки |
+| `productLock[]` | array | Зафиксированные характеристики товара: `lockId`, `property`, `value`, `sourceIds`, `confidence`, `immutable` |
+| `generationPrompts[]` | array | Кадры для генерации фото (см. ниже) |
+| `productLockQa` | object | `requiredChecks`, `rejectOnImmutableMismatch` |
+| `reportLayout[]` | string[] | Порядок секций (подсказка для UI) |
+| `slides[]` | array | Прежние `n`/`title`/`verdict`/`state`/`notes` + optional `thumbnailRef`, роль, доказательства, пометки, `actionId`, `acceptanceCriteria` |
+
+Поля v1 (`actionsP0`, `actionsP1`, `generationPrompt`, `roadmap` и др.) остались в схеме и не удалены.
+
+### `generationPrompts[]`
+
+Один объект — один кадр. Поля: `frameId` (обязательное, например `F01`), `goal`, `sourceImages`, `productLockRefs`, `scene`, `composition`, `camera`, `lighting`, `modelAndStyling`, `creativeZone`, `freeTextZone`, `prohibited`, `acceptanceCriteria`, `textOverlay`, `missingReferences`, `status`.
+
+`status`:
+
+| Значение | Смысл |
+|----------|-------|
+| `ready` | Кадр готов, можно отправлять в генерацию |
+| `draft` | Черновик, можно отправлять в генерацию |
+| `blocked` | Признак или ракурс не подтверждён, нужные материалы перечислены в `missingReferences`. В генерацию не отправляется |
+
+### Результат в API (`GET /{id}/result`)
+
+`report_to_result_payload` кладёт в `result`: `report` (без `generationPrompt` и `generationPrompts`), `generationPrompt`, `generationPrompts`, `bundle`, `coverage`, `llm`. `generationPrompts` вынесены на верхний уровень `result` вместе с `generationPrompt`. Если LLM вернул пустой `generationPrompt`, сервер заполняет его текстом первого кадра `ready`, при их отсутствии — первого `draft` (`blocked` пропускаются; текст собирает `flatten_frame_prompt`).
+
+## Отображение отчёта
+
+Старые аудиты не пересчитываются. Portal читает v1 и v2 одним интерфейсом через адаптер `manager-portal/src/lib/card-audit-report-view-model.ts`: отчёт считается v2, если есть `reportVersion = "2.0"` или непустой `scoreBreakdown`.
+
+- v1: `actionsP0`/`actionsP1` превращаются в список действий; `generationPrompt` — в один кадр `ready` с `frameId = "LEGACY"`; блоки expectation/return/funnel/productLock без данных не показываются.
+- Картинки кадров: для слайда берётся `thumbnailRef` (http-ссылка или номер кадра галереи), иначе `bundle.ownCard.imageUrls` по порядку слайда. Нет URL — плейсхолдер «Нет изображения».
+- Отчёт — набор листов A4 (`manager-portal/src/components/card-audit-report/`): обзор, визуальный разбор, ожидания и возвраты, воронка, действия и A/B, производство (зафиксированные характеристики и промпты кадров), приложения. Стили `@media print` с разрывами страниц; кнопка «Печать» вызывает `window.print()`.
+- Серверная генерация PDF **не реализована**: печать/сохранение в PDF — средствами браузера.
+- Страницы archive и trace из эталонного макета не реализованы.
+- Admin-панель показывает сырой JSON результата.
 
 ## Поток
 
@@ -113,7 +163,7 @@ UI:
 
 Фича тарифа: `card_audit` (seat-наследование, как у `reviews_analysis`).
 
-Промт из отчёта можно сразу отправить в [ИИ-генерацию фото](./card-generate.md) (`/card-generations/new?auditId=…`).
+Кадр из отчёта можно отправить в [ИИ-генерацию фото](./card-generate.md): на листе «Производство» у каждого кадра `ready`/`draft` есть кнопка «Сгенерировать кадр» → `/card-generations/new?auditId=…&frameId=…`. Для `blocked` кнопки нет. Для v1-аудита (`frameId = "LEGACY"`) ссылка без `frameId`.
 
 ## Веса Мурликов
 

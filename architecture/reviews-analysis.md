@@ -31,6 +31,7 @@ flowchart LR
 UI: Manager Portal → Анализ отзывов (`/reviews-analysis`).
 
 - Список, создание, карточка со статусом и отчётом.
+- Отчёт показывается как набор печатных листов A4 (`components/reviews-analysis-report.tsx`), кнопка «Печать» — `window.print()`. Серверного PDF нет. Схема результата и промпты анализа не менялись.
 - Виджет активного анализа в оболочке портала (пока идёт обработка).
 - Доступ по фиче тарифа `reviews_analysis` (`session.planFeatures`).
 - Только клиентский API из таблицы выше; admin journal — отдельно в Admin Panel.
