@@ -1,6 +1,7 @@
 # Интеграция Telegram-auth в клиентах
 
-Референс-реализация: Manager Portal (`/login/telegram`, `/complete-profile`, настройки → Telegram).
+Референс-реализация: Manager Portal (`/login/telegram`, `/welcome`, настройки → Telegram).  
+`/complete-profile` в портале — legacy redirect на `/welcome`.
 
 Расширение и другие клиенты **подключают те же API**; UI в `extension-chrome` намеренно не реализован.
 
@@ -68,6 +69,9 @@
 
 Если `needsProfileCompletion === true` (или `GET /auth/telegram/status` вернул флаг):
 
+- **Manager Portal:** открыть `/welcome` — форма email/пароль на той же странице, затем шаги быстрого старта.
+- **Другие клиенты:** свой экран email+password → тот же API ниже.
+
 ### `POST /auth/telegram/complete-profile`
 
 **Auth:** Bearer access token.
@@ -87,6 +91,26 @@
 ```
 
 Пока флаг true — не пускайте в основной UI.
+
+## 2.1. Web onboarding (Manager Portal)
+
+После регистрации / дозаполнения портал показывает `/welcome`, пока `GET /users/me` возвращает `needsOnboarding: true` (`onboardingCompletedAt === null`).
+
+### `POST /auth/onboarding/complete`
+
+**Auth:** Bearer access token. Тело пустое / `{}`.
+
+**Пример ответа:**
+
+```json
+{
+  "onboardingCompletedAt": "2026-10-18T12:00:00Z",
+  "needsOnboarding": false
+}
+```
+
+Идемпотентно: повторный вызов не меняет уже установленный timestamp.  
+После успеха Manager Portal переходит на `/dashboard`.
 
 ## 3. Статус / привязка
 
@@ -114,7 +138,7 @@
 1. После deep-link / custom URL handler получить `token`.
 2. `exchange` с `deviceId` из `chrome.storage` / своего store.
 3. Сохранить JWT как при email-login.
-4. Если `needsProfileCompletion` — экран email+password → `complete-profile`.
+4. Если `needsProfileCompletion` — экран email+password → `complete-profile` (свой UI; путь `/welcome` — только portal).
 5. Привязку существующего аккаунта делайте из экрана настроек через `link` (тот же flow, что в Manager Portal).
 
 Email/password login остаётся независимым каналом.

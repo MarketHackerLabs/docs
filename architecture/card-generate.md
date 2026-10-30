@@ -4,7 +4,7 @@
 
 Модуль `card_generate` генерирует кадры карточки товара по загруженному фото, формату, качеству и опциональному промту/референсам. Списание — **Мурлики** (`card_generate/quality_*`).
 
-Отдельный модуль от `card_audit`: аудит может только подставить `generationPrompt` при создании генерации (`sourceAuditId`). Standalone-запуск без аудита обязателен.
+Отдельный модуль от `card_audit`: аудит может только подставить промт кадра при создании генерации (`sourceAuditId` + опционально `sourceFrameId`). Standalone-запуск без аудита обязателен.
 
 ## Поток
 
@@ -54,16 +54,24 @@ Prefix: `/api/v1/card-generations`.
 | `POST /{id}/cancel` | Отмена |
 | `GET /assets/{key}` | Локальная выдача файла (если не S3) |
 
-Create body (camelCase): `productAssetKey`, `aspectRatio`, `imageCount` (1–5), `quality` (`1K`\|`2K`\|`4K`), опционально `prompt`, `description`, `refAssetKeys`, `sourceAuditId`, `organizationId`, `title`, `nmId`.
+Create body (camelCase): `productAssetKey`, `aspectRatio`, `imageCount` (1–5), `quality` (`1K`\|`2K`\|`4K`), опционально `prompt`, `description`, `refAssetKeys`, `sourceAuditId`, `sourceFrameId`, `organizationId`, `title`, `nmId`.
 
-Если передан `sourceAuditId` и промт пустой — сервер подставляет `generationPrompt` из completed-аудита (с проверкой владельца).
+`sourceFrameId`: string \| null, необязательный. Значение `generationPrompts[].frameId` из результата аудита (например `F01`). Учитывается только вместе с `sourceAuditId`.
+
+Если передан `sourceAuditId` и `prompt` пустой — сервер ищет промт в completed-аудите своего пользователя (чужой аудит → 404):
+
+1. Есть `sourceFrameId`: берётся кадр с этим `frameId`, текст собирается `flatten_frame_prompt`. Кадр `blocked` или не найденный → промт остаётся пустым, без fallback на другой кадр.
+2. Нет `sourceFrameId`: первый кадр `ready`, затем первый `draft` (`blocked` пропускаются).
+3. Кадров нет (аудит v1): `generationPrompt` из результата аудита.
+
+Заполненный `prompt` в запросе всегда приоритетнее аудита.
 
 Admin: `/api/v1/admin/card-generate/settings`, `/generations`, detail/result/cancel.
 
 ## UI
 
 - Manager Portal → `/card-generations` (список, `/new`, результат).
-- Из отчёта аудита: CTA «Сгенерировать» → `/card-generations/new?auditId=…`.
+- Из отчёта аудита: кнопка «Сгенерировать кадр» → `/card-generations/new?auditId=…&frameId=…`. Форма загружает результат аудита, подставляет промт выбранного кадра и передаёт `sourceFrameId` при создании. Без `frameId` (старая ссылка, v1-аудит) или при `blocked`/неизвестном `frameId` подставляется первый `ready`, затем первый `draft`, затем `generationPrompt`; `sourceFrameId` в этом случае не отправляется.
 - Активные джобы — третий kind `card_generate` в FAB «Задачи в работе».
 - Admin → «ИИ-генерация»: список запусков + параметры провайдера/модели.
 
