@@ -58,7 +58,7 @@ Email/password login не заменяется. MFA при входе через
 
 `needsProfileCompletion = email is null OR password_hash is null` — после первого входа клиент обязан показать экран дозаполнения.
 
-Контракт для клиентов: [telegram-auth-client.md](../integrations/telegram-auth-client.md).
+В Manager Portal дозаполнение и быстрый старт (установка расширения) объединены на `/welcome`. Пока у пользователя `users.onboarding_completed_at` пуст (`needsOnboarding` в `GET /users/me`), портал держит его на `/welcome`; завершение — `POST /auth/onboarding/complete`. Подробности: [welcome-onboarding design](../superpowers/specs/2026-10-18-welcome-onboarding-design.md), контракт Telegram: [telegram-auth-client.md](../integrations/telegram-auth-client.md).
 
 ## Admin
 
