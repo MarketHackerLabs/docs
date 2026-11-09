@@ -390,13 +390,15 @@ Seed-продукты (миграция `20260704_0019`):
 
 ### Применение лимитов
 
-Активные докупки и промо-бусты объединяются в `limit_adjustments.py` и применяются в `BillingService.get_effective_plan()`:
+Активные докупки, промо-бусты и admin-гранты Мурликов объединяются в `limit_adjustments.py` и применяются в `BillingService.get_effective_plan()`:
 
 ```
-effective_limit = plan_limit + promo_boosts + purchased_addons
+effective_limit = plan_limit + promo_boosts + purchased_addons + admin_mh_credits_grants
 ```
 
-Результат кэшируется в Redis (TTL 60 с, инвалидация при смене подписки или докупки).  
+Admin-начисления хранятся в `billing_mh_credits_admin_grants`; в лимит входят только неотозванные записи, у которых `period_start` совпадает с текущим billing-периодом пользователя (как у ledger по `used`). Выдача и отзыв — в карточке пользователя админ-панели; списания в `billing_mh_credits_ledger` при гранте не меняются.
+
+Результат кэшируется в Redis (TTL 60 с, инвалидация при смене подписки, докупки, выдаче или отзыве admin-гранта).  
 Сериализация плана (`plan_to_dict`) включает все числовые лимиты каталога, в том числе `max_mh_credits_per_period` (и зеркало `max_reviews_products_per_period`) — иначе кэш отдавал бы ложный безлимит.
 
 ## Мурлики и веса
