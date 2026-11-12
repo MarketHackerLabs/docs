@@ -34,7 +34,8 @@
 
 | Команда | Поведение |
 |---|---|
-| `/start CODE` | Привязка к user_id из Redis (код из `POST /auth/telegram/link`); ставит отложенное приветствие |
+| `/start ref_CODE` | Партнёрский referral: click, регистрация (если новый), attribution, бонус; существующий — только login |
+| `/start CODE` (без `ref_`) | Привязка к user_id из Redis (код из `POST /auth/telegram/link`); ставит отложенное приветствие |
 | `/start` (новый TG) | Создаёт `User` (email/password = null) + org + `TelegramAccount`, шлёт кнопку входа; ставит отложенное приветствие |
 | `/start` (уже связан) | Кнопка входа (one-time token) |
 | `/login` | То же: one-time token → Manager Portal |
@@ -42,7 +43,7 @@
 Токены:
 
 - link: Redis `telegram:link:{code}`, TTL 15 мин
-- login: Redis `telegram:login:{token}`, TTL 5 мин
+- login: Redis `telegram:login:{token}`, TTL 5 мин; payload JSON `{ user_id, pending_promo_code }`; legacy plain UUID ещё читается
 
 ## Auth API
 

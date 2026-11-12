@@ -73,6 +73,8 @@ Bind разрешён только если партнёр `active`, кампа�
 
 1. Переход `?ref=CODE` → signed HttpOnly cookie `mh_ref` (30 дней) + click.
 2. Регистрация: consume cookie / `refCode` body → first-touch attribution.
+2b. Telegram: `/start ref_CODE` → click + регистрация в боте → first-touch attribution;
+    клиентский бонус: `free_period` redeem сразу, `discount` через pending promo в login token.
 3. Промокод партнёра: после валидного redeem/upgrade → try_attribute.
 4. Self-referral запрещён (`partner.user_id != user_id`).
 5. Повторная атрибуция игнорируется (first-touch wins).
