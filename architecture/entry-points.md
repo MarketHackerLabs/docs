@@ -55,6 +55,18 @@ rules и асинхронно обогащает инсайты через OpenR
 Повторный POST в окне TTL возвращает тот же `reportId` без дубля LLM job,
 если insights уже `ready`/`running`/`skipped`.
 
+## Admin: модель LLM
+
+| Метод | Путь | Доступ |
+|-------|------|--------|
+| GET | `/api/v1/admin/entry-points/settings` | superuser |
+| PATCH | `/api/v1/admin/entry-points/settings` | superuser |
+
+Singleton `entry_point_settings.llm_model` (default `google/gemini-2.5-flash`).  
+Job enrichment читает модель отсюда; fallback при ошибке OpenRouter — константа `google/gemini-2.0-flash`.
+
+Admin UI: раздел «Точки входа» → «Параметры».
+
 ## Вне scope v1
 
 - Excel (остаётся в extension)
