@@ -109,6 +109,8 @@ flowchart TB
 | [Биллинг и оплата](./billing.md) | Подписки, промокоды, докупка лимитов, ЮKassa, webhook, фоновая сверка. Мурлики в рублях: [operations/murliki-unit-economics.md](../operations/murliki-unit-economics.md) |
 | [Карта товаров площадок](./product-matching.md) | Общая карта SKU ↔ артикулы WB/Ozon, без привязки к кабинету |
 | [Контроль FBS-остатков](./stock-control.md) | Физический склад, остатки WB/Ozon по складам, рекомендации и алерты |
+| [Точки входа WB](./entry-points.md) | Enrichment-отчёт точек входа: lost revenue, rules, LLM |
+| [Клиент «Точки входа»](../integrations/entry-points-client.md) | Контракт API для extension / клиентов, полл insights |
 | [Анализ отзывов](./reviews-analysis.md) | AI-анализ отзывов/вопросов, квоты, OpenRouter |
 | [ИИ-аудит карточки](./card-audit.md) | AI-аудит карточки WB, Мурлики, OpenRouter vision |
 | [ИИ-генерация фото](./card-generate.md) | Генерация кадров карточки, Мурлики, OpenRouter Image API |
