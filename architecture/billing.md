@@ -414,6 +414,8 @@ Admin-начисления хранятся в `billing_mh_credits_admin_grants`
 | | `with_reviews` | +10 | если в аудите включён сбор отзывов/вопросов |
 | | `per_competitor` | +5 | за каждого конкурента (≤5) |
 | Генерация фото | `quality_1K` / `2K` / `4K` | 20 / 40 / 80 | `image_count × вес качества` |
+| Оспаривание обмеров: разбор ответа WB (`measurement_dispute_analyze_response`) | `base` | 5 | фиксированно за разбор |
+| Оспаривание обмеров: анализ фото (`measurement_dispute_photo_analysis`) | `per_measurement` | 3 | `measurement_count × 3` |
 
 Расчёт: `compute_cost(action_key, …)`. Ledger: `billing_mh_credits_ledger`.
 
