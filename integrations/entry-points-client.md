@@ -288,7 +288,7 @@ Authorization: Bearer <accessToken>
 | `lostRub` | decimal | |
 | `title` | string | ≤ 90 симв. |
 | `body` | string | ≤ 220 симв. |
-| `action` | string | Текст CTA ≤ 32 симв. |
+| `action` | string | Текст CTA ≤ 64 симв. (обрезка по границе слова) |
 
 #### `actionPlan`
 
