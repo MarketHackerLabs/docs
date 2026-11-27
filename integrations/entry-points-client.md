@@ -108,9 +108,8 @@ Authorization: Bearer <accessToken>
 Правила валидации на сервере:
 
 - дубли `id` (включая детей) → ошибка;
-- `clicks > shows × 1.05` (при `shows > 0`) → ошибка;
-- `shows = 0` и `clicks > 0` → ошибка;
 - `avgPrice` обязателен и `> 0` при `orders > 0`.
+- `clicks > shows` (в т.ч. при `shows = 0`) — **допустимо**: на WB так бывает; CTR на сервере clamp в `[0, 100]`.
 
 #### `activityByRegionHour` (опционально)
 
@@ -424,8 +423,6 @@ Authorization: Bearer <accessToken>
 - `compareEnabled` без `previous` / `prevFrom`/`prevTo`;
 - период > 31 дня;
 - дубли id;
-- clicks сильно больше shows.
-
 Клиент **не** показывает stack / имена полей схемы / SQL.
 
 ---
