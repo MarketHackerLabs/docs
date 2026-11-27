@@ -116,6 +116,7 @@ flowchart TB
 | [ИИ-генерация фото](./card-generate.md) | Генерация кадров карточки, Мурлики, OpenRouter Image API |
 | [Оспаривание обмеров WB](./measurement-disputes.md) | Локальный XLSX, ИИ-разбор ответа WB и фото обмеров, Мурлики |
 | [Клиент «Оспаривание обмеров»](../integrations/measurement-disputes-extension.md) | Контракт API и приёмка для модалки в extension |
+| [Клиент вводного оффера биллинга](../integrations/billing-intro-offer-client.md) | Контракт intro-offer / checkout / статус `intro` для extension |
 | [Remote config расширения](./extension-remote-config.md) | DOM-селекторы, ETag, контракт для extension |
 | [Продуктовые промо](./product-promotions.md) | Баннеры / CTA в клиентах, placements, targeting |
 | [Новости](./news.md) | Редакционный feed, прочтение, admin `news:manage` |

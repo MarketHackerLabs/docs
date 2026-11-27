@@ -613,9 +613,26 @@ sequenceDiagram
 
 При истечении `trial_ends_at` подписка переводится в `cancelled`, пользователь получает лимиты free-тарифа (с учётом активных бустов).
 
+### Вводный оффер (`intro`)
+
+Глобальная настройка в `platform_settings` (`intro_offer_*`): цена, дни, целевой тариф, флаг win-back для уже плативших подписку. Точечные права — таблица `billing_intro_offer_grants`.
+
+| Шаг | Поведение |
+|-----|-----------|
+| `GET /billing/intro-offer` | Eligibility + параметры оффера |
+| `POST /billing/subscription/intro` | Checkout `payment_type=subscription_intro` |
+| Активация | Статус **`intro`**, период = N дней из настроек, карта сохраняется |
+| Автопродление | `intro` входит в due-for-renewal; успех → `active` + полная monthly-цена тарифа |
+| Отмена / нет карты | Полного списания нет |
+
+Клиентский контракт для расширения: [billing-intro-offer-client.md](../integrations/billing-intro-offer-client.md).  
+Продуктовые требования: [billing-intro-offer-requirements](../superpowers/specs/2026-11-27-billing-intro-offer-requirements.md).
+
+Не путать с промо `trial` (бесплатные дни без автосписания).
+
 ### Истечение периода (`expired`)
 
-Подписки со статусом `active` / `trialing` / `past_due` и прошедшим `current_period_end`
+Подписки со статусом `active` / `intro` / `trialing` / `past_due` и прошедшим `current_period_end`
 переводятся в `status=expired` (автопродление отключается):
 
 1. **Cron** `process_yookassa_renewals` — всегда в начале джобы (даже если recurrent выключен).
@@ -624,7 +641,7 @@ sequenceDiagram
 2. **Лениво** при резолве effective plan — если период уже истёк и подписка не в grace
    отмены, статус обновляется до `expired` при следующем запросе доступа.
 
-Админка (дашборд, аналитика, счётчики) считает активными только `active` и `trialing`
+Админка (дашборд, аналитика, счётчики) считает активными `active`, `intro` и `trialing`
 по полю `status` — после перевода в `expired` подписка больше не попадает в эти метрики.
 
 `cancelled` после конца периода остаётся `cancelled` (не путать с `expired`: отмена
